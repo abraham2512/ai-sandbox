@@ -35,7 +35,13 @@ they may still need it.
 
 ## New CRs from Reference
 
-Add to closest-fit existing partner policy based on:
+Only add CRs that are new and required in the target version. Do NOT
+add optional or commented-out reference CRs. The reference examples
+include many optional configurations -- only the partner's existing
+CRs plus genuinely new required CRs belong in the output.
+
+When adding a required new CR, place in closest-fit existing partner
+policy based on:
 1. Same wave grouping
 2. Similar content (e.g. logging CRs go with existing logging policy)
 3. If no clear fit, ask the user which policy to add it to

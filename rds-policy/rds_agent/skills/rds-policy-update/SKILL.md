@@ -48,12 +48,36 @@ Ask the user directly for anything missing.
 
 - **EXPLAIN** -- diff two reference versions, classify changes per-CR.
   Only needs the two versions -- no partner policies required.
-- **MERGE** -- combine reference updates with partner customizations
-- **VALIDATE** -- dry-run merged policies against hub
+  Read `references/policygenerator-semantics.md` first -- it has the
+  extraction command for fetching reference CRs from the ZTP container.
+- **MERGE** -- combine reference updates with partner customizations.
+  Read `references/cr-matching-heuristics.md`,
+  `references/merge-conflict-resolution.md`, and
+  `references/hub-template-handling.md` before starting.
+- **VALIDATE** -- dry-run merged policies against hub.
+  Read `references/validate-phases.md` before starting.
 
 Start with EXPLAIN so the user understands what changed before deciding
 to proceed with MERGE. Only ask for policy source when the user is ready
 to merge.
+
+## After EXPLAIN
+
+Save the EXPLAIN output to a file (e.g. `/tmp/rds-explain-{old}-to-{new}.md`)
+so MERGE can reference it without relying on conversation context.
+
+Build a merge checklist from the EXPLAIN results with the **actual CRs
+and changes** — not generic categories. For example:
+
+- [ ] Subscription/sriov-network-operator — channel 4.18 → 4.20
+- [ ] TunedPerformancePatch — renamed, priority changed
+- [ ] ImageContentSourcePolicy → ImageDigestMirrorSet — GVK replacement
+- [ ] ClusterLogForwarder/instance — new required CR, place in policy
+- [ ] ReduceMonitoringFootprint — new fields added, check for conflicts
+
+Save this checklist to the EXPLAIN output file. During MERGE, work
+through it one by one, checking off each item as it's resolved. Present
+the updated checklist to the user after MERGE completes.
 
 ## Gotchas
 
@@ -71,8 +95,10 @@ to merge.
 - SRIOV matching is 1-to-N. One reference CR may map to multiple partner CRs.
   Apply changes to ALL confirmed matches.
 
-- Source CR paths reorganize between versions (flat -> subdirectories).
-  Path changes are NOT content changes.
+- Source CR paths reorganize between versions (flat -> subdirectories),
+  but symlinks at the root level preserve backward compatibility. Old
+  flat paths (e.g. `source-crs/SriovNetwork.yaml`) still resolve. Do
+  NOT update manifest path references -- they work as-is.
 
 - Wave ordering: 1-2 (install) -> 10 (configure) -> 100 (site).
   Don't move CRs across boundaries.
@@ -80,7 +106,21 @@ to merge.
 - Policy CRD accepts unknown fields inside `objectDefinition` --
   dry-run only catches Policy wrapper errors, not embedded CR errors.
 
-## After Merge
+- MERGE only touches what the partner already has. Do NOT add optional
+  or commented-out reference CRs into the partner's policies. Only add
+  CRs that are new and required in the target version. Optional CRs
+  are only added if the user explicitly requests them (via the "new
+  functionality" input). Process the partner's CRs one by one against
+  the reference changes -- not the other way around.
+
+## Output
+
+Always output a complete artifact set -- do not ask whether to include
+parts of it:
+- Updated PolicyGenerator YAML files
+- The source-crs/ directory with base CRs for the target version
+- Any additional source-crs the partner added
+- Hub template ConfigMaps (as needed)
 
 Flag new hub template variables that need per-cluster values populated.
 
