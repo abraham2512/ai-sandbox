@@ -48,6 +48,32 @@ policy based on:
 
 Preserve partner naming conventions for the policy.
 
+## Version-Pinned Values
+
+Partners may intentionally pin a version that differs from the current
+OCP version. Common examples:
+- CatalogSource image tags pinned to an older release
+- Subscription channels set to a specific version
+- Image references with explicit version tags
+
+Detection: if a version-bearing field doesn't match the current (old)
+OCP version, the partner likely pinned it intentionally.
+
+Action: do NOT auto-update. Mark with `⚠ REVIEW` and present to user
+with the current value and what the "expected" bump would be. Let the
+user decide.
+
+## Uncertainty Rule
+
+When not 100% sure a change is safe, **leave the partner's value alone**
+and flag it. Present:
+- What the checklist says to change
+- What the partner currently has
+- Why you're uncertain
+
+It is always safer to flag something and let the user decide than to
+silently apply a change that might break their deployment.
+
 ## New Functionality from User
 
 When the user requests new features (e.g. "add logging health check"),

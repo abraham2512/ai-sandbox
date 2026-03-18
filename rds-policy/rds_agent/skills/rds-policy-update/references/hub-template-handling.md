@@ -23,7 +23,9 @@ Common functions:
 If a partner hardcoded a value instead of using a hub template, preserve
 it -- even if the reference changes the template. Hardcoding is intentional.
 
-Use `scripts/cr_utils.py:is_hardcoded_override()` to detect this.
+Detect by comparing: if the partner's value is a plain string (no
+`{{hub ... hub}}` delimiters) where the reference uses a template,
+it's a hardcoded override.
 
 Example:
 - Reference: `"{{hub fromConfigMap "" (printf "%s-ptpconfig" .ManagedClusterName) "interface" hub}}"`

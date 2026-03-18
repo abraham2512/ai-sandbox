@@ -12,9 +12,9 @@ If a `fetch_reference` MCP tool is available, use it. Otherwise run
 extraction directly via shell.
 
 Container layout at `/home/ztp/`:
-- `source-crs/` -- individual CR YAML files (base templates). In 4.20+,
-  organized into subdirectories by operator (e.g. `sriov-operator/`,
-  `ptp-operator/`). Earlier versions use a flat layout.
+- `source-crs/` -- individual CR YAML files (base templates). Directory
+  structure may change between versions (flat vs operator subdirectories).
+  Check for backward-compatible symlinks.
 - `argocd/example/acmpolicygenerator/` -- PolicyGenerator YAML examples
   for different profiles (common, group-du-sno, site, etc.)
 - `reference/` -- telco-reference content organized by operator
@@ -95,3 +95,11 @@ Preserve wave assignments from the reference unless user explicitly changes them
 - Array merge depends on merge key (usually `name` for named items)
 
 A patch field represents an intentional override of the base CR value.
+
+## Architecture-Specific CRs
+
+Some source CRs may have architecture-specific variants (e.g. under
+`x86_64/` and `aarch64/` subdirectories). When diffing or merging,
+check whether CRs that previously had a single file now have per-arch
+variants. If so, ask the partner which architecture they target to
+select the correct path.

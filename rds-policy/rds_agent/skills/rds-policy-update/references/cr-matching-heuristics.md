@@ -50,8 +50,10 @@ may need to be replicated across all matches. Present all candidates to the user
 
 ### Tuned
 - Primary: `spec.profile[].name`, `spec.recommend[].priority`
-- Reference renames happen between versions (e.g. performance-patch ->
-  ran-du-performance). Match by profile content, not name.
+- Reference may rename profiles between versions. Match by profile
+  content structure and recommend priority, not name.
+- Profile hierarchy may change (single profile split into multiple
+  arch-specific profiles). Compare the data sections.
 
 ### MachineConfig
 - Primary: `metadata.name` prefix pattern, `spec.config.storage.files[].path`
@@ -59,14 +61,14 @@ may need to be replicated across all matches. Present all candidates to the user
 
 ## GVK Replacements
 
-Between versions, a CR's GVK may change entirely (e.g. 4.18->4.20:
-`ImageContentSourcePolicy` replaced by `ImageDigestMirrorSet`). Treat as
-removal + addition, but present as a replacement. Carry over partner
-customizations where fields map.
+Between versions, a CR's GVK may change entirely. Detect by looking for:
+1. A CR file removed in the new version (not just moved to a subdirectory)
+2. A new CR file added that serves the same purpose
+3. The old and new CRs have similar spec structure but different apiVersion/kind
 
-Known replacements:
-- `ImageContentSourcePolicy` (operator.openshift.io/v1alpha1) ->
-  `ImageDigestMirrorSet` (config.openshift.io/v1)
+Treat as removal + addition, but present as a replacement to the user.
+Carry over partner customizations where fields map between old and new GVK.
+Flag fields that don't have a direct mapping.
 
 ## Escalation
 
