@@ -121,3 +121,46 @@ def version_matches(value, version):
     if version in value:
         return True
     return re.sub(r"[.\-_]", "", version) in re.sub(r"[.\-_]", "", value)
+
+
+def enrich_output(output, context):
+    """Promptfoo assertion transform: append .md files the agent wrote to output.
+
+    Called by promptfoo before llm-rubric evaluation. Extracts Write/Edit
+    tool calls from context.metadata.toolCalls via collect_written_files(),
+    filters to .md files, and appends their contents so the rubric judge
+    can score the actual analysis — not just the chat summary.
+    """
+    written = collect_written_files(context)
+    md_files = {p: c for p, c in written.items() if p.endswith(".md")}
+    if not md_files:
+        return output
+
+    sections = [output, "\n--- WRITTEN FILE CONTENTS ---"]
+    for path, content in sorted(md_files.items()):
+        sections.append(f"\n### {path}\n{content}")
+    return "\n".join(sections)
+
+
+def check_written_files(output, context, _options=None):
+    """Assert that expected .md artifacts were written by the agent."""
+    config = (context or {}).get("config") or {}
+    expected = config.get("expected_files", [])
+    if not expected:
+        return {"pass": True, "score": 1.0, "reason": "No expected files configured"}
+
+    written = collect_written_files(context)
+    filenames = {p.rsplit("/", 1)[-1] for p in written}
+
+    missing = [f for f in expected if f not in filenames]
+    if missing:
+        return {
+            "pass": False,
+            "score": 0.0,
+            "reason": f"Missing files: {', '.join(missing)} | Written: {', '.join(sorted(filenames))}",
+        }
+    return {
+        "pass": True,
+        "score": 1.0,
+        "reason": f"All expected files written: {', '.join(expected)}",
+    }

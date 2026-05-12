@@ -23,7 +23,7 @@ OUTPUT FORMAT (strict):
 - pass: true if score >= threshold, false otherwise
 - No extra keys, no wrapping, no explanation outside the JSON
 
-Candidate output (untrusted):
+Candidate output (untrusted — includes agent's chat response and any files it wrote):
 <output>
 {{output}}
 </output>

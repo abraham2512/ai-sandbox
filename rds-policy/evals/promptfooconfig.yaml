@@ -1,19 +1,49 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'RDS Policy Agent Skill Evals — 3 tests: EXPLAIN accuracy, comprehensive MERGE, required CR severity'
-
-# Test matrix:
-#   T1 EXPLAIN     — reference diff accuracy, workflow ordering (EXPLAIN before MERGE)
-#   T2 MERGE       — GVK migration, CR replication, conflict flagging, wave change,
-#                    mustnothave, redundant overlay, coverage scan, checklist quality,
-#                    multi-PG structure, version bumps, safety (no unsafe apply),
-#                    AskUserQuestion logging
-#   T3 REQUIRED-CR — missing required vs optional CR severity
+#
+# RDS Policy Agent Skill Evals
+# ============================
+#
+# 3 tests covering EXPLAIN accuracy, end-to-end MERGE, and required CR severity.
+#
+# Test matrix
+# -----------
+#   T1 EXPLAIN      ref diff accuracy, workflow ordering (EXPLAIN before MERGE)
+#   T2 MERGE        full end-to-end: GVK migration, CR replication, conflict
+#                    flagging, wave change, mustnothave, redundant overlay,
+#                    coverage scan, checklist quality, multi-PG structure,
+#                    version bumps, safety, AskUserQuestion logging
+#   T3 REQUIRED-CR  missing required vs optional CR severity
 #
 # Skill triggering is implicitly tested by all 3 (each checks skill-used).
 #
-# All tests use a single self-contained workdir (fixtures/)
-# with synthetic refs and partner fixtures. hooks.js handles git-based
-# cleanup so agent writes don't contaminate fixtures between tests.
+# Assertion strategy
+# ------------------
+# Two complementary assertion types run against the same agent session:
+#
+#   Deterministic (python)   Check exact file contents, tool calls, and
+#                            structure via metadata.toolCalls. Fast, precise,
+#                            no LLM cost. Used for artifact correctness.
+#
+#   Semantic (llm-rubric)    LLM judge scores the agent's communication
+#                            quality against a rubric. Non-deterministic.
+#                            Used for conflict flagging, coverage reporting,
+#                            and checklist quality.
+#
+# The agent writes analysis to files (explain.md, checklist.md) but its
+# chat response may be just a file listing. Rubric assertions that need
+# to see file contents use `transform: file://assertions/common.py:enrich_output`
+# which appends written .md files to the output before the judge scores it.
+#
+# Environment
+# -----------
+# All tests use a self-contained workdir (fixtures/) with synthetic refs
+# and partner fixtures. hooks.js copies the skill into fixtures/.claude/
+# before tests and cleans up after.
+#
+# Results are stored in ~/.promptfoo/promptfoo.db (not committed).
+# Run `make eval-view` to browse results in the browser.
+
+description: 'RDS Policy Agent Skill Evals'
 
 prompts:
   - "{{prompt}}"
@@ -41,7 +71,8 @@ providers:
 extensions:
   - file://hooks.js:extensionHook
 
-# Pin grading provider (Vertex) and judge prompt for stable llm-rubric scoring
+# Pin grading provider and judge prompt for stable llm-rubric scoring.
+# Override with PROMPTFOO_GRADING_PROVIDER env var for CI.
 defaultTest:
   options:
     provider:
@@ -60,19 +91,26 @@ defaultTest:
 
 tests:
   # ============================================================
-  # EXPLAIN — accuracy + workflow ordering
+  # T1: EXPLAIN — reference diff accuracy + workflow ordering
   #
-  # Fixtures used: ref-4.18/, ref-4.20/ (reference only, no partner)
+  # Fixtures: ref-4.18/, ref-4.20/ (reference only, no partner)
   # Tests EXPLAIN in isolation — no merge, no partner fixture.
+  #
+  # Assertions:
+  #   skill-activation  skill was loaded
+  #   explain-tuned     mentions TunedPerformancePatch changes
+  #   explain-gvk       mentions ICSP → IDMS migration
+  #   workflow          EXPLAIN runs before asking for partner source
   # ============================================================
 
-  - description: "EXPLAIN accuracy and ordering"
+  - description: "EXPLAIN — reference diff accuracy and ordering"
     vars:
       prompt: "what changed between RDS 4.18 and 4.20?"
     assert:
       - type: skill-used
         value: rds-policy-update
         metric: skill-activation
+      # --- Semantic: does the explanation cover key changes? ---
       - type: llm-rubric
         value: |
           The output mentions the TunedPerformancePatch changes between
@@ -88,6 +126,7 @@ tests:
           Score 1.0 if clearly described, 0.5 if briefly mentioned, 0.0 if absent.
         threshold: 0.5
         metric: explain-gvk
+      # --- Workflow: EXPLAIN must come before asking for merge inputs ---
       - type: llm-rubric
         value: |
           The agent explained what changed between reference versions
@@ -99,51 +138,145 @@ tests:
         metric: workflow
 
   # ============================================================
-  # COMPREHENSIVE MERGE — all merge behaviors + safety
+  # T2: COMPREHENSIVE MERGE — all merge behaviors + safety
   #
-  # Fixture: partner-comprehensive/ has 2 PolicyGenerator files
-  # covering every merge scenario. All assertions run independently
-  # against the same agent session — each Python function checks
-  # its own thing in toolCalls/output, so failures are precise.
+  # Fixture: partner-comprehensive/ (2 PolicyGenerator files)
+  # Covers every merge scenario in one end-to-end session.
   #
-  # Ref changes (9 source CRs + PG examples in acmpolicygenerator/):
-  #   - DisconnectedICSP → DisconnectedIDMS (GVK migration)
-  #   - TunedPerformancePatch 1→4 profiles (list restructure)
-  #   - SubscriptionOCP: channel stable-4.18 → stable-4.20
-  #   - NMStateOperator: exists in 4.18, absent in 4.20 (CR removal)
-  #   - StorageLV: wave 2 → 10 (wave change)
-  #   - ConsoleOperatorDisable: mustnothave in 4.20 PG example
-  #   - PtpConfigSlave/Boundary: scheduling fields added (one-of)
-  #   - SriovFecClusterConfig: in both refs, partner doesn't use
+  # Reference changes (9 source CRs + PG examples):
+  #   DisconnectedICSP → DisconnectedIDMS    GVK migration
+  #   TunedPerformancePatch 1→4 profiles     list restructure
+  #   SubscriptionOCP channel 4.18→4.20      version bump
+  #   NMStateOperator removed in 4.20        CR removal
+  #   StorageLV wave 2→10                    wave change
+  #   ConsoleOperatorDisable mustnothave      complianceType change
+  #   PtpConfigSlave scheduling fields        new ref fields
+  #   SriovFecClusterConfig                   in ref, not in partner
   #
   # Partner fixture (2 PG files):
   #   acme-config-v4-18.yaml (wave 1-2):
-  #     - ICSP with mirror patch (GVK migration)
-  #     - ConsoleOperatorDisable with logLevel patch (mustnothave)
-  #     - Subscription with channel pin + installPlanApproval (conflict + redundant)
-  #     - NMState with label (CR removal)
-  #     - StorageLV with sizePercent patch (wave change)
+  #     ICSP with mirror patch               → tests GVK migration
+  #     ConsoleOperatorDisable logLevel       → tests mustnothave conflict
+  #     Subscription channel + planApproval   → tests conflict + redundant overlay
+  #     NMState with custom label             → tests CR removal
+  #     StorageLV with sizePercent            → tests wave change + patch preservation
   #   acme-ran-v4-18.yaml (wave 10):
-  #     - AcmeMonitoring (partner-only custom CR)
-  #     - PtpConfigSlave ens7f0 (PTP one-of, replication instance 1)
-  #     - AcmePtpConfig (duplicate CR detection)
-  #     - TunedPerformancePatch with sysctl + priority 19 (list merge + conflict)
-  #     - PtpConfigSlave ens8f0 in separate policy (replication instance 2)
+  #     AcmeMonitoring                        → tests partner-only CR preservation
+  #     PtpConfigSlave ens7f0                 → tests PTP replication instance 1
+  #     AcmePtpConfig                         → tests duplicate CR detection
+  #     TunedPerformancePatch priority 19     → tests list merge + priority conflict
+  #     PtpConfigSlave ens8f0 (separate policy) → tests PTP replication instance 2
+  #
+  # Assertions are grouped by type:
+  #   1. Activation + safety       skill loaded, no unsafe kubectl apply
+  #   2. Artifact checks           expected files written, PG structure valid
+  #   3. Deterministic file checks config-driven YAML content verification
+  #   4. Semantic rubric checks    LLM judge scores communication quality
+  #   5. Logging                   AskUserQuestion call recording
   # ============================================================
 
   - description: "COMPREHENSIVE MERGE — all merge behaviors"
     vars:
       prompt: "upgrade my policies from 4.18 to 4.20. the policy source is partner-comprehensive/ which has two PolicyGenerator files. do the full EXPLAIN and MERGE end-to-end, use recommended defaults for any conflicts"
     assert:
+      # ----- 1. Activation + safety -----
       - type: skill-used
         value: rds-policy-update
         metric: skill-activation
-      # --- Safety (folded from standalone test) ---
       - type: python
         value: file://assertions/safety.py:no_unsafe_apply
         metric: safety
         weight: 5
-      # --- Semantic output checks (llm-rubric) ---
+
+      # ----- 2. Artifact checks -----
+      # Verify the skill produced the expected output files
+      - type: python
+        value: file://assertions/common.py:check_written_files
+        metric: written-files
+        config:
+          expected_files:
+            - checklist.md
+            - explain.md
+      # Verify multi-PG structure: version bumps, namespaces, placement labels
+      - type: python
+        value: file://assertions/structural.py:check_multi_pg_structure
+        metric: multi-pg-structure
+        config:
+          target_version: &tv "4.20"
+
+      # ----- 3. Deterministic file checks -----
+      # Config-driven checks on written YAML files. Each check maps to a
+      # merge behavior from the skill. The Python engine (merge.py) is
+      # generic — all CR-specific logic lives here in the config.
+      - type: python
+        value: file://assertions/merge.py:check_file_content
+        metric: merge-file-content
+        config:
+          target_version: *tv
+          checks:
+            # -- GVK migration (ICSP → IDMS) --
+            - name: idms_exists
+              type: exists
+              cr: "source-crs/DisconnectedIDMS.yaml"
+            - name: icsp_removed
+              type: not_exists
+              cr: "source-crs/DisconnectedICSP.yaml"
+            - name: idms_mirrors_populated
+              cr: "source-crs/DisconnectedIDMS.yaml"
+              path: "patches[].spec.imageDigestMirrors"
+            - name: icsp_mirrors_absent
+              cr: "source-crs/DisconnectedIDMS.yaml"
+              path: "patches[].spec.repositoryDigestMirrors"
+              empty: true
+            - name: partner_mirror_preserved
+              cr: "source-crs/DisconnectedIDMS.yaml"
+              path: "patches[].spec.imageDigestMirrors"
+              contains: "registry.acme.example.com"
+            # -- List merge (Tuned restructure) --
+            - name: tuned_sysctl_in_correct_profile
+              type: profile_content
+              cr: "source-crs/TunedPerformancePatch.yaml"
+              profiles_path: "patches[].spec.profile[]"
+              profile_name_contains: "architecture-common"
+              data_contains: "kernel.timer_migration"
+              section_contains: "[sysctl]"
+            - name: tuned_exists
+              type: exists
+              cr: "source-crs/TunedPerformancePatch.yaml"
+            # -- Partner-only CR preservation --
+            - name: partner_custom_cr_preserved
+              type: exists
+              cr: "custom-crs/AcmeMonitoring.yaml"
+            # -- New ref fields (PTP scheduling) --
+            - name: ptp_scheduling_fields
+              cr: "source-crs/PtpConfigSlave.yaml"
+              path: "patches[].spec.profile[].ptpSchedulingPolicy"
+            # -- CR replication (both PTP interfaces preserved) --
+            - name: ptp_interface_ens7f0
+              cr: "source-crs/PtpConfigSlave.yaml"
+              path: "patches[].spec.profile[].interface"
+              contains: "ens7f0"
+            - name: ptp_interface_ens8f0
+              cr: "source-crs/PtpConfigSlave.yaml"
+              path: "patches[].spec.profile[].interface"
+              contains: "ens8f0"
+            # -- CR removal (NMState dropped in 4.20) --
+            - name: nmstate_removed
+              type: not_exists
+              cr: "source-crs/NMStateOperator.yaml"
+            # -- Patch preservation (StorageLV customization) --
+            - name: storagelv_patch_preserved
+              cr: "source-crs/StorageLV.yaml"
+              path: "patches[].spec.storage.deviceClasses[].thinPoolConfig.sizePercent"
+
+      # ----- 4. Semantic rubric checks -----
+      # LLM judge evaluates communication quality. Assertions that need to
+      # see file contents use the enrich_output transform (appends written
+      # .md files to output before the judge scores it).
+      - type: regex
+        value: "4[._-]20"
+        metric: mentions-target-version
+      # Does the agent discuss all key merge topics?
       - type: llm-rubric
         value: |
           The agent's output discusses the following merge topics:
@@ -154,9 +287,8 @@ tests:
           Score 1.0 if all 4 topics are covered, 0.75 if 3, 0.5 if 2, 0.25 if 1, 0.0 if none.
         threshold: 0.5
         metric: merge-communication
-      - type: regex
-        value: "4[._-]20"
-        metric: mentions-target-version
+        transform: file://assertions/common.py:enrich_output
+      # Does it flag the priority 19→18 conflict for review?
       - type: llm-rubric
         value: |
           The agent explicitly flagged a priority conflict: the partner
@@ -166,6 +298,7 @@ tests:
           0.5 if priority mentioned but not clearly flagged, 0.0 if absent.
         threshold: 0.5
         metric: conflict-flagging
+      # Does it flag channel conflict and NMState removal?
       - type: llm-rubric
         value: |
           The agent flagged these overlay lifecycle issues:
@@ -176,6 +309,8 @@ tests:
           Score 1.0 if both required items flagged, 0.5 if one, 0.0 if neither.
         threshold: 0.5
         metric: overlay-lifecycle
+        transform: file://assertions/common.py:enrich_output
+      # Does it flag the StorageLV wave reordering?
       - type: llm-rubric
         value: |
           The agent flagged that StorageLV (or LVMCluster) moved from
@@ -184,6 +319,8 @@ tests:
           mentioned without wave context, 0.0 if not mentioned.
         threshold: 0.5
         metric: wave-change-flagging
+        transform: file://assertions/common.py:enrich_output
+      # Does it warn about ConsoleOperatorDisable mustnothave vs partner patches?
       - type: llm-rubric
         value: |
           The agent warned about ConsoleOperatorDisable: the partner has
@@ -194,6 +331,7 @@ tests:
           with removal context, 0.0 if not mentioned.
         threshold: 0.5
         metric: mustnothave-warning
+      # Does it notice the Tuned restructure? (optional — threshold 0.0)
       - type: llm-rubric
         value: |
           The agent acknowledged that TunedPerformancePatch was restructured
@@ -203,6 +341,7 @@ tests:
           0.0 if not mentioned. This is optional — passing with 0.0 is acceptable.
         threshold: 0.0
         metric: list-merge-awareness
+      # Does it flag the redundant installPlanApproval overlay?
       - type: llm-rubric
         value: |
           The agent flagged at least one redundant overlay — a partner patch
@@ -214,6 +353,7 @@ tests:
           0.5 if mentioned without cleanup suggestion, 0.0 if not flagged.
         threshold: 0.5
         metric: redundant-overlay
+      # Does it report which reference CRs the partner doesn't use?
       - type: llm-rubric
         value: |
           The agent performed a coverage scan: it compared the reference
@@ -224,72 +364,8 @@ tests:
           covered, 0.0 if no coverage reporting at all.
         threshold: 0.5
         metric: coverage-scan
-      # --- Deterministic checks (python — config-driven, no CR-specific code) ---
-      - type: python
-        value: file://assertions/merge.py:check_file_content
-        metric: merge-file-content
-        config:
-          target_version: &tv "4.20"
-          checks:
-            # GVK migration: IDMS manifest must exist in output
-            - name: idms_exists
-              type: exists
-              cr: "source-crs/DisconnectedIDMS.yaml"
-            # GVK migration: old ICSP must not remain
-            - name: icsp_removed
-              type: not_exists
-              cr: "source-crs/DisconnectedICSP.yaml"
-            # GVK migration: new IDMS field hierarchy must be populated
-            - name: idms_mirrors_populated
-              cr: "source-crs/DisconnectedIDMS.yaml"
-              path: "patches[].spec.imageDigestMirrors"
-            # GVK migration: old ICSP field hierarchy must not remain
-            - name: icsp_mirrors_absent
-              cr: "source-crs/DisconnectedIDMS.yaml"
-              path: "patches[].spec.repositoryDigestMirrors"
-              empty: true
-            # Patch preservation: partner's custom registry mirror carried to new GVK
-            - name: partner_mirror_preserved
-              cr: "source-crs/DisconnectedIDMS.yaml"
-              path: "patches[].spec.imageDigestMirrors"
-              contains: "registry.acme.example.com"
-            # List merge: partner sysctl lands in correct 4.20 profile after restructure
-            - name: tuned_sysctl_in_correct_profile
-              type: profile_content
-              cr: "source-crs/TunedPerformancePatch.yaml"
-              profiles_path: "patches[].spec.profile[]"
-              profile_name_contains: "architecture-common"
-              data_contains: "kernel.timer_migration"
-              section_contains: "[sysctl]"
-            # CR presence: Tuned manifest carried through to output
-            - name: tuned_exists
-              type: exists
-              cr: "source-crs/TunedPerformancePatch.yaml"
-            # Partner-only CR: custom CR not in reference must be preserved
-            - name: partner_custom_cr_preserved
-              type: exists
-              cr: "custom-crs/AcmeMonitoring.yaml"
-            # New ref fields: 4.20 scheduling fields applied to PTP manifest
-            - name: ptp_scheduling_fields
-              cr: "source-crs/PtpConfigSlave.yaml"
-              path: "patches[].spec.profile[].ptpSchedulingPolicy"
-            # CR replication: both PTP instances preserved with correct interfaces
-            - name: ptp_interface_ens7f0
-              cr: "source-crs/PtpConfigSlave.yaml"
-              path: "patches[].spec.profile[].interface"
-              contains: "ens7f0"
-            - name: ptp_interface_ens8f0
-              cr: "source-crs/PtpConfigSlave.yaml"
-              path: "patches[].spec.profile[].interface"
-              contains: "ens8f0"
-            # CR removal: NMState removed in 4.20 ref, must not remain in output
-            - name: nmstate_removed
-              type: not_exists
-              cr: "source-crs/NMStateOperator.yaml"
-            # Patch preservation: partner's StorageLV customization carried through
-            - name: storagelv_patch_preserved
-              cr: "source-crs/StorageLV.yaml"
-              path: "patches[].spec.storage.deviceClasses[].thinPoolConfig.sizePercent"
+        transform: file://assertions/common.py:enrich_output
+      # Does the checklist have completion status for each item?
       - type: llm-rubric
         value: |
           The agent produced a structured merge summary or checklist that
@@ -300,29 +376,32 @@ tests:
           0.5 if partial summary, 0.0 if no summary produced.
         threshold: 0.5
         metric: checklist-quality
-      - type: python
-        value: file://assertions/structural.py:check_multi_pg_structure
-        metric: multi-pg-structure
-        config:
-          target_version: *tv
-      # Log AskUserQuestion calls — shows exact questions, options,
-      # and which option was auto-selected (first_option behavior).
+        transform: file://assertions/common.py:enrich_output
+
+      # ----- 5. Logging (always passes) -----
+      # Records AskUserQuestion calls — what was asked, which option
+      # was auto-selected. Informational, not a pass/fail gate.
       - type: python
         value: file://assertions/workflow.py:log_user_questions
         metric: user-questions-log
 
   # ============================================================
-  # REQUIRED CR SEVERITY — missing required vs optional CRs
+  # T3: REQUIRED CR SEVERITY — missing required vs optional CRs
   #
-  # Fixture: partner-required-cr/ — only has DisconnectedICSP + SubscriptionOCP
+  # Fixture: partner-required-cr/ — minimal partner with only
+  # DisconnectedICSP + SubscriptionOCP. Tests what happens when
+  # the partner is missing CRs that the reference requires.
   #
-  # Missing required (uncommented in ref PG examples):
-  #   - TunedPerformancePatch → agent should warn
-  #   - PtpConfigSlave → agent should warn
+  # Missing required (uncommented in reference PG examples):
+  #   TunedPerformancePatch  → agent should warn with "WARNING"/"required"
+  #   PtpConfigSlave         → agent should warn with "WARNING"/"required"
   #
-  # Missing optional (commented out in ref PG examples):
-  #   - SriovFecClusterConfig → agent should note, not warn
-  #   - PtpConfigBoundary → agent should note, not warn
+  # Missing optional (commented out in reference PG examples):
+  #   SriovFecClusterConfig  → agent should note, not warn
+  #   PtpConfigBoundary      → agent should note, not warn
+  #
+  # This can't be tested with partner-comprehensive/ (which has
+  # all CRs), hence the separate minimal fixture.
   # ============================================================
 
   - description: "REQUIRED CR SEVERITY — distinguish required vs optional missing CRs"
