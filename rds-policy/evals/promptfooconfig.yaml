@@ -1,47 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-#
-# RDS Policy Agent Skill Evals
-# ============================
-#
-# 3 tests covering EXPLAIN accuracy, end-to-end MERGE, and required CR severity.
-#
-# Test matrix
-# -----------
-#   T1 EXPLAIN      ref diff accuracy, workflow ordering (EXPLAIN before MERGE)
-#   T2 MERGE        full end-to-end: GVK migration, CR replication, conflict
-#                    flagging, wave change, mustnothave, redundant overlay,
-#                    coverage scan, checklist quality, multi-PG structure,
-#                    version bumps, safety, AskUserQuestion logging
-#   T3 REQUIRED-CR  missing required vs optional CR severity
-#
-# Skill triggering is implicitly tested by all 3 (each checks skill-used).
-#
-# Assertion strategy
-# ------------------
-# Two complementary assertion types run against the same agent session:
-#
-#   Deterministic (python)   Check exact file contents, tool calls, and
-#                            structure via metadata.toolCalls. Fast, precise,
-#                            no LLM cost. Used for artifact correctness.
-#
-#   Semantic (llm-rubric)    LLM judge scores the agent's communication
-#                            quality against a rubric. Non-deterministic.
-#                            Used for conflict flagging, coverage reporting,
-#                            and checklist quality.
-#
-# The agent writes analysis to files (explain.md, checklist.md) but its
-# chat response may be just a file listing. Rubric assertions that need
-# to see file contents use `transform: file://assertions/common.py:enrich_output`
-# which appends written .md files to the output before the judge scores it.
-#
-# Environment
-# -----------
-# All tests use a self-contained workdir (fixtures/) with synthetic refs
-# and partner fixtures. hooks.js copies the skill into fixtures/.claude/
-# before tests and cleans up after.
-#
-# Results are stored in ~/.promptfoo/promptfoo.db (not committed).
-# Run `make eval-view` to browse results in the browser.
+# See README.md for test matrix, assertion strategy, and environment docs.
 
 description: 'RDS Policy Agent Skill Evals'
 
@@ -86,7 +44,7 @@ defaultTest:
       threshold: 3.00
       metric: cost
     - type: latency
-      threshold: 900000
+      threshold: 900000  # ms — 15 min total runtime per test (p90 ~8 min, see README.md)
       metric: latency
 
 tests:
@@ -96,21 +54,28 @@ tests:
   # Fixtures: ref-4.18/, ref-4.20/ (reference only, no partner)
   # Tests EXPLAIN in isolation — no merge, no partner fixture.
   #
-  # Assertions:
-  #   skill-activation  skill was loaded
-  #   explain-tuned     mentions TunedPerformancePatch changes
-  #   explain-gvk       mentions ICSP → IDMS migration
-  #   workflow          EXPLAIN runs before asking for partner source
+  # All ref differences (diff -r ref-4.18 ref-4.20):
+  #   PG-level changes:
+  #     DisconnectedICSP → DisconnectedIDMS       GVK migration
+  #     ConsoleOperatorDisable complianceType      mustnothave added
+  #     NMStateOperator                            removed from PG
+  #   Source-crs changes:
+  #     TunedPerformancePatch                      rename + restructure (1→4 profiles)
+  #     ConsoleOperatorDisable managementState      Removed added
+  #     PtpConfig{Boundary,Slave} scheduling       SCHED_FIFO + priority added
+  #     SriovFecClusterConfig priority              priority: 1 added
+  #     StorageLV wave 2→10 + nodeSelector          wave change + new field
+  #     SubscriptionOCP channel                     4.18→4.20
   # ============================================================
 
-  - description: "EXPLAIN — reference diff accuracy and ordering"
+  - description: "T1 EXPLAIN — reference diff accuracy and ordering"
     vars:
       prompt: "what changed between RDS 4.18 and 4.20?"
     assert:
       - type: skill-used
         value: rds-policy-update
         metric: skill-activation
-      # --- Semantic: does the explanation cover key changes? ---
+      # --- Semantic: does the explanation cover each ref difference? ---
       - type: llm-rubric
         value: |
           The output mentions the TunedPerformancePatch changes between
@@ -126,6 +91,55 @@ tests:
           Score 1.0 if clearly described, 0.5 if briefly mentioned, 0.0 if absent.
         threshold: 0.5
         metric: explain-gvk
+      - type: llm-rubric
+        value: |
+          The output mentions that ConsoleOperatorDisable changed and
+          correlates the two aspects: managementState: Removed in the
+          source-cr AND complianceType: mustnothave in the PG (i.e. the
+          console is now fully removed, not just disabled).
+          Score 1.0 if the correlation is explicit, 0.5 if both are
+          mentioned but not connected, 0.0 if either is absent.
+        threshold: 0.5
+        metric: explain-console
+      - type: llm-rubric
+        value: |
+          The output mentions that NMStateOperator was removed from the
+          reference PolicyGenerator in 4.20 (dropped from tracking, omitted
+          from policy, or similar phrasing).
+          Score 1.0 if clearly described, 0.5 if briefly mentioned, 0.0 if absent.
+        threshold: 0.5
+        metric: explain-nmstate
+      - type: llm-rubric
+        value: |
+          The output mentions PTP scheduling changes — new ptpSchedulingPolicy
+          (SCHED_FIFO) and/or ptpSchedulingPriority fields added to
+          PtpConfigBoundary and/or PtpConfigSlave source-crs.
+          These are source-crs-only changes that will be picked up automatically
+          by using the new source-crs.
+          Score 1.0 if clearly described, 0.5 if briefly mentioned, 0.0 if absent.
+        threshold: 0.5
+        metric: explain-ptp
+      - type: llm-rubric
+        value: |
+          The output mentions the StorageLV changes: wave changed from 2 to 10,
+          and/or nodeSelector added.
+          Score 1.0 if clearly described, 0.5 if briefly mentioned, 0.0 if absent.
+        threshold: 0.5
+        metric: explain-storagelv
+      - type: llm-rubric
+        value: |
+          The output mentions the SubscriptionOCP channel change from
+          stable-4.18 to stable-4.20 (or equivalent version bump language).
+          Score 1.0 if clearly described, 0.5 if briefly mentioned, 0.0 if absent.
+        threshold: 0.5
+        metric: explain-subscription
+      - type: llm-rubric
+        value: |
+          The output mentions the SriovFecClusterConfig change — a priority
+          field was added in the 4.20 source-cr.
+          Score 1.0 if clearly described, 0.5 if briefly mentioned, 0.0 if absent.
+        threshold: 0.5
+        metric: explain-sriovfec
       # --- Workflow: EXPLAIN must come before asking for merge inputs ---
       - type: llm-rubric
         value: |
@@ -175,7 +189,7 @@ tests:
   #   5. Logging                   AskUserQuestion call recording
   # ============================================================
 
-  - description: "COMPREHENSIVE MERGE — all merge behaviors"
+  - description: "T2 COMPREHENSIVE MERGE — all merge behaviors"
     vars:
       prompt: "upgrade my policies from 4.18 to 4.20. the policy source is partner-comprehensive/ which has two PolicyGenerator files. do the full EXPLAIN and MERGE end-to-end, use recommended defaults for any conflicts"
     assert:
@@ -403,7 +417,7 @@ tests:
   # all CRs), hence the separate minimal fixture.
   # ============================================================
 
-  - description: "REQUIRED CR SEVERITY — distinguish required vs optional missing CRs"
+  - description: "T3 REQUIRED CR SEVERITY — distinguish required vs optional missing CRs"
     vars:
       prompt: "upgrade my policies from 4.18 to 4.20. the policy source is partner-required-cr/, go ahead with the full upgrade"
     assert:
