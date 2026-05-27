@@ -1,0 +1,27 @@
+# RDS Policy Agent
+#
+# Layers the rds-policy-update skill onto the lightspeed-agentic-sandbox
+# base image. The base provides FastAPI + Claude SDK + tooling; this image
+# adds the skill directory so the agent discovers it at runtime.
+#
+# Build:
+#   podman build -t rds-policy-agent .
+#
+# Requires the base image to be available locally or in a registry.
+# To build the base from source:
+#   podman build -t lightspeed-agentic-sandbox -f Containerfile \
+#       ../lightspeed-agentic-sandbox/
+
+ARG BASE_IMAGE=lightspeed-agentic-sandbox:latest
+FROM ${BASE_IMAGE}
+
+# Copy the RDS policy update skill into the skills directory.
+# The base image sets LIGHTSPEED_SKILLS_DIR=/app/skills and the Claude
+# provider discovers skills from subdirectories under that path.
+COPY rds_agent/skills/rds-policy-update/ /app/skills/rds-policy-update/
+
+ENV LIGHTSPEED_AGENT_PROVIDER=claude
+
+LABEL name="rds-policy-agent" \
+      summary="RDS Policy Update agent for OpenShift Lightspeed" \
+      description="Lightspeed agentic sandbox with the RDS Day 2 config policy update skill"
