@@ -164,7 +164,7 @@ tests:
   #   NMStateOperator removed in 4.20        CR removal
   #   StorageLV wave 2→10                    wave change
   #   ConsoleOperatorDisable mustnothave      complianceType change
-  #   PtpConfigSlave scheduling fields        new ref fields
+  #   PtpConfigSlave scheduling fields        new ref fields (should NOT be injected)
   #   SriovFecClusterConfig                   in ref, not in partner
   #
   # Partner fixture (2 PG files):
@@ -238,7 +238,7 @@ tests:
             - name: idms_mirrors_populated
               cr: "source-crs/DisconnectedIDMS.yaml"
               path: "patches[].spec.imageDigestMirrors"
-            - name: icsp_mirrors_absent
+            - name: old_icsp_structure_absent
               cr: "source-crs/DisconnectedIDMS.yaml"
               path: "patches[].spec.repositoryDigestMirrors"
               empty: true
@@ -258,10 +258,11 @@ tests:
             - name: partner_custom_cr_preserved
               type: exists
               cr: "custom-crs/AcmeMonitoring.yaml"
-            # -- New ref fields (PTP scheduling) --
-            - name: ptp_scheduling_fields
+            # -- No injection of new ref fields partner didn't customize --
+            - name: ptp_scheduling_not_injected
               cr: "source-crs/PtpConfigSlave.yaml"
               path: "patches[].spec.profile[].ptpSchedulingPolicy"
+              empty: true
             # -- CR replication (both PTP interfaces preserved) --
             - name: ptp_interface_ens7f0
               cr: "source-crs/PtpConfigSlave.yaml"
@@ -409,9 +410,9 @@ tests:
   #   TunedPerformancePatch  → agent should warn with "WARNING"/"required"
   #   PtpConfigSlave         → agent should warn with "WARNING"/"required"
   #
-  # Missing optional (commented out in reference PG examples):
-  #   SriovFecClusterConfig  → agent should note, not warn
-  #   PtpConfigBoundary      → agent should note, not warn
+  # Missing optional CRs (commented out in reference PG examples)
+  # like SriovFecClusterConfig and PtpConfigBoundary are expected
+  # absences — not asserted here to avoid noise.
   #
   # This can't be tested with partner-comprehensive/ (which has
   # all CRs), hence the separate minimal fixture.

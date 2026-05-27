@@ -81,7 +81,7 @@ to merge.
 
 Save two files:
 
-Generate a timestamp with `date +%Y%m%d-%H%M%S` and create a single
+Generate a timestamp with `date +%Y%m%d-%H%M%S` and create a new single
 output directory for the entire run: `/tmp/rds-merge-{target}-{timestamp}/`.
 All outputs (reports, checklist, merged policies) go inside this directory.
 
@@ -227,11 +227,9 @@ For each item:
      reference changes to ALL instances. If patches differ between
      instances, flag each one separately.
 2. **Apply the change** if it doesn't conflict with partner customizations.
-   This includes new fields the reference added to an existing CR -- if
-   the partner hasn't patched that field, add it to their patches. For
-   example, if the reference adds `ptpSchedulingPolicy: SCHED_FIFO` to
-   PtpConfigSlave and the partner only patches `interface`, add the
-   scheduling fields to the partner's patches.
+   Only carry forward fields the partner has explicitly patched — do not
+   add new reference fields that the partner never customized. Patches
+   should contain only intentional partner overrides, not reference defaults.
    Mark as `[x]` in the checklist with a note of what changed.
 3. **Flag for user review** if:
    - Partner has customized the same field the reference changed (true conflict)
