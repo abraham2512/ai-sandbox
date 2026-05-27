@@ -1,4 +1,4 @@
-.PHONY: init test-ci lint setup setup-rh-pre-commit install-uv
+.PHONY: init test-ci lint setup setup-rh-pre-commit install-uv rds-image rds-eval rds-eval-skill
 
 install-uv:
 	@command -v uv >/dev/null 2>&1 || { echo "Installing uv..."; curl -LsSf https://astral.sh/uv/install.sh | sh; }
@@ -22,3 +22,12 @@ setup-rh-pre-commit: setup
 	uv pip install "rh-gitleaks @ git+https://gitlab.cee.redhat.com/infosec-public/developer-workbench/tools.git#subdirectory=rh-gitleaks"
 	@echo "Logging in to rh-gitleaks pattern server..."
 	uv run python3 -m rh_gitleaks login
+
+rds-image: ## Build rds-policy-agent container image
+	$(MAKE) -C rds-policy image
+
+rds-eval: ## Run rds-policy container evals
+	$(MAKE) -C rds-policy eval
+
+rds-eval-skill: ## Run rds-policy promptfoo skill evals
+	$(MAKE) -C rds-policy eval-skill
