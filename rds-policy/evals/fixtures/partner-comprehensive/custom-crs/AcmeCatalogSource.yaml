@@ -1,0 +1,10 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: acme-operators-disconnected
+  namespace: openshift-marketplace
+  annotations:
+    ran.openshift.io/ztp-deploy-wave: "1"
+spec:
+  sourceType: grpc
+  image: "registry.acme.example.com/catalogs/sno-operator-index:1.3.0"

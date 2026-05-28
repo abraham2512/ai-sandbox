@@ -15,6 +15,15 @@ policies:
   policyAnnotations:
     ran.openshift.io/ztp-deploy-wave: "1"
   manifests:
+    - path: custom-crs/AcmeCatalogSource.yaml
+      patches:
+      - metadata:
+          labels:
+            lca.openshift.io/target-ocp-version: "4.18.13"
+    - path: source-crs/ClusterMonitoringConfig.yaml
+      patches:
+      - data:
+          config.yaml: '{{hub fromConfigMap "ztp-acme-v4-18" "monitoring-values" "config" hub}}'
     - path: source-crs/DisconnectedICSP.yaml
       patches:
       - spec:
@@ -35,14 +44,37 @@ policies:
       - spec:
           channel: "stable-4.18"
           installPlanApproval: Automatic
+    - path: source-crs/OAuthLDAP.yaml
+      patches:
+      - metadata:
+          annotations:
+            kubectl.kubernetes.io/last-applied-configuration: '{"apiVersion":"config.openshift.io/v1"}'
+        spec:
+          identityProviders:
+          - name: ldap-provider
+            type: LDAP
+            ldap:
+              url: "ldap://ldap.acme.example.com"
+              bindDN: "cn=svc-ocp,ou=services,dc=acme,dc=com"
     - path: source-crs/NMStateOperator.yaml
       patches:
       - metadata:
           labels:
             acme-managed: "true"
+    - path: custom-crs/AcmeSecret.yaml
+      patches:
+      - metadata:
+          name: acme-app-secret
+          labels:
+            app: acme
+            data:
+              token: "abc123"
     - path: source-crs/StorageLV.yaml
       patches:
-      - spec:
+      - metadata:
+          labels:
+            lca.openshift.io/target-ocp-version: "4.18.13"
+        spec:
           storage:
             deviceClasses:
             - name: vg1

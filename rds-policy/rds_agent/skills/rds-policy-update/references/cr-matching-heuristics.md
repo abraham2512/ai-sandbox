@@ -67,8 +67,15 @@ Between versions, a CR's GVK may change entirely. Detect by looking for:
 3. The old and new CRs have similar spec structure but different apiVersion/kind
 
 Treat as removal + addition, but present as a replacement to the user.
-Carry over partner customizations where fields map between old and new GVK.
+Carry over partner customizations where fields map between old and new
+GVK. When fields are renamed between the old and new API (e.g. a spec
+list field changes name), map the partner's patch values to the new
+field names. Read both the old and new source-cr files side by side to
+identify which fields were renamed vs which are genuinely new.
 Flag fields that don't have a direct mapping.
+
+See `merge-conflict-resolution.md` "GVK Replacement Procedure" for the
+step-by-step merge process.
 
 ## Escalation
 

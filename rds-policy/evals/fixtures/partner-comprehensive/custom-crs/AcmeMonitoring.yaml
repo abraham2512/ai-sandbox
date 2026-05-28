@@ -9,3 +9,4 @@ data:
   monitoring.conf: |
     interval=30
     endpoint=https://monitor.acme.example.com
+  restic-backup: "enabled"

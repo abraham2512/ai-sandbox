@@ -100,13 +100,7 @@ def _check_profile_content(check, all_manifests):
     if m is None:
         return (name, False, f"manifest '{cr}'", "not found")
 
-    raw_profiles = jmespath.search(check["profiles_path"], m) or []
-    profiles = []
-    for item in raw_profiles:
-        if isinstance(item, list):
-            profiles.extend(item)
-        elif isinstance(item, dict):
-            profiles.append(item)
+    profiles = jmespath.search(check["profiles_path"], m) or []
     target_profile = check["profile_name_contains"]
     expected_content = check["data_contains"]
     expected_section = check.get("section_contains", "")
@@ -134,6 +128,107 @@ def _check_profile_content(check, all_manifests):
         f"'{expected_content}' in profile '{target_profile}'",
         f"not found in {len(profiles)} profiles",
     )
+
+
+def check_no_unrequested_crs(_output, context):
+    """Agent must not inject optional reference CRs the partner doesn't use."""
+    config = context.get("config") or {}
+    forbidden = config.get("forbidden_crs", [])
+    written = collect_written_files(context)
+    pg_docs, _ = parse_pg_docs(written)
+    manifests = collect_manifests(pg_docs)
+    paths = [m.get("path", "") for m in manifests]
+    injected = [
+        cr for cr in forbidden if any(cr.lower() in p.lower() for p in paths)
+    ]
+    if injected:
+        return {
+            "pass_": False,
+            "score": 0,
+            "reason": f"Unrequested CRs injected: {', '.join(injected)}",
+        }
+    return {
+        "pass_": True,
+        "score": 1.0,
+        "reason": "No unrequested reference CRs found in output",
+    }
+
+
+def check_hub_template_namespace(_output, context):
+    """Hub template namespace references must track the target version."""
+    config = context.get("config") or {}
+    source_ns = config.get("source_namespace_pattern", "v4-18")
+    written = collect_written_files(context)
+    hits = []
+    for fp, content in written.items():
+        if not fp.endswith((".yaml", ".yml")):
+            continue
+        for i, line in enumerate(content.splitlines(), 1):
+            if "hub" in line and source_ns in line:
+                hits.append(f"{fp}:{i}")
+    if hits:
+        return {
+            "pass_": False,
+            "score": 0,
+            "reason": f"Stale hub template namespace ({source_ns}): {', '.join(hits[:5])}",
+        }
+    return {
+        "pass_": True,
+        "score": 1.0,
+        "reason": "Hub template namespaces updated",
+    }
+
+
+def check_kustomization_updated(_output, context):
+    """Parent kustomization.yaml should reference new version files."""
+    config = context.get("config") or {}
+    target_version = config.get("target_version", "4.20")
+    written = collect_written_files(context)
+    kustomization = None
+    for fp, content in written.items():
+        if "kustomization" in fp.lower():
+            kustomization = content
+            break
+    if not kustomization:
+        return {
+            "pass_": False,
+            "score": 0,
+            "reason": "No kustomization.yaml written",
+        }
+    tv = target_version.replace(".", "-")
+    if tv in kustomization or target_version in kustomization:
+        return {
+            "pass_": True,
+            "score": 1.0,
+            "reason": "Kustomization references target version",
+        }
+    return {
+        "pass_": False,
+        "score": 0,
+        "reason": f"Kustomization missing target version {target_version}",
+    }
+
+
+def check_quote_preservation(_output, context):
+    """YAML quote styles must be preserved through the merge."""
+    config = context.get("config") or {}
+    expected = config.get("expected_patterns", [])
+    written = collect_written_files(context)
+    content = "\n".join(
+        c for p, c in written.items() if p.endswith((".yaml", ".yml"))
+    )
+    missing = [p for p in expected if p not in content]
+    if missing:
+        return {
+            "pass_": False,
+            "score": 0,
+            "reason": f"Quote patterns lost: {missing}",
+        }
+    return {
+        "pass_": True,
+        "score": 1.0,
+        "reason": "All quote patterns preserved",
+    }
 
 
 def check_file_content(_output, context):

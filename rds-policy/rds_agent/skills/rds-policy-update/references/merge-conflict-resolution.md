@@ -42,6 +42,13 @@ a removal policy, include it in the merge.
 If partner has customizations on a CR being removed, flag for user --
 they may still need it.
 
+When the source-cr file for a manifest no longer exists in the target
+version, the manifest entry must be removed from the partner's output --
+policy generation will fail if it references a missing file. If the
+partner has patches on this manifest, flag as `[!]` before removing:
+the partner may need to provide their own copy of the source-cr file
+or migrate to a replacement CR.
+
 ## New CRs from Reference
 
 Only add CRs that are new and required in the target version. Do NOT
@@ -88,6 +95,41 @@ OCP version, the partner likely pinned it intentionally.
 Action: do NOT auto-update. Mark with `⚠ REVIEW` and present to user
 with the current value and what the "expected" bump would be. Let the
 user decide.
+
+## GVK Replacement Procedure
+
+When processing a GVK replacement during merge, update three things:
+
+1. **Manifest path** -- swap the old source-cr filename to the new one
+2. **Patch field names** -- if the API renamed fields between old and new
+   GVK, rename them in the partner's patches. Carry the partner's VALUES
+   to the new field names. Read both old and new source-cr files side by
+   side to identify field renames (e.g. a list field renamed from one
+   convention to another).
+3. **apiVersion/kind** -- if the partner patches apiVersion or kind
+   directly, update to the new GVK values.
+
+The partner's actual customization values must survive the migration.
+Only the structural wrapper (paths, field names, GVK) changes. If a
+field in the old API has no counterpart in the new API, flag as `[!]`.
+
+## CR Restructure Placement
+
+When a CR's internal structure is reorganized between versions (e.g. one
+profile split into multiple architecture-specific profiles, one list
+reorganized into named sections), determine where partner customizations
+belong in the new structure:
+
+1. Read the target version's base source-CR to understand each new
+   section's purpose (architecture scope, hardware type, functional role).
+2. Match partner customizations to sections by purpose --
+   architecture-level settings go in the architecture section,
+   hardware-specific settings go in the hardware section, etc.
+3. If a partner customization doesn't clearly belong in any new section,
+   flag as `[!]` and ask the user.
+
+Do not place all partner content in the first section by default --
+this is a common agent mistake that creates incorrect output.
 
 ## Uncertainty Rule
 

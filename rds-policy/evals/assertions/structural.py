@@ -9,6 +9,7 @@ removal) are handled by config-driven checks in merge.py:check_file_content.
 """
 
 from common import (
+    collect_manifests,
     collect_written_files,
     parse_pg_docs,
     version_matches,
@@ -20,37 +21,37 @@ def _fmt(name, passed, expected, actual):
     return f"{status} {name} | EXPECTED: {expected} | ACTUAL: {actual}"
 
 
-def check_parent_kustomization(_output, context):
-    """Agent must write or edit a kustomization.yaml that includes the target version directory."""
-    config = context["config"]
-    target_ver = config["target_version"]
+def check_yaml_nesting(_output, context):
+    """Verify data/spec/status are siblings of metadata, not nested under it.
 
+    The partner fixture includes a Secret with data incorrectly nested under
+    metadata. The agent should fix this during merge. If data appears under
+    metadata in any patch, the nesting is wrong.
+    """
     written = collect_written_files(context)
+    pg_docs, _ = parse_pg_docs(written)
+    manifests = collect_manifests(pg_docs)
 
-    kustomization_files = {
-        p: c for p, c in written.items() if "kustomization" in p.lower()
-    }
+    issues = []
+    for m in manifests:
+        path = m.get("path", "?")
+        for patch in m.get("patches", []):
+            if not isinstance(patch, dict):
+                continue
+            meta = patch.get("metadata")
+            if isinstance(meta, dict) and "data" in meta:
+                issues.append(f"data nested under metadata in {path}")
 
-    if not kustomization_files:
+    if issues:
         return {
             "pass_": False,
-            "score": 0.0,
-            "reason": f"No kustomization.yaml found in written files. Written: {', '.join(written.keys()) or '(none)'}",
+            "score": 0,
+            "reason": f"YAML nesting issues: {'; '.join(issues)}",
         }
-
-    for path, content in kustomization_files.items():
-        if version_matches(content, target_ver):
-            return {
-                "pass_": True,
-                "score": 1.0,
-                "reason": f"kustomization.yaml at {path} references target version {target_ver}",
-            }
-
-    paths = ", ".join(kustomization_files.keys())
     return {
-        "pass_": False,
-        "score": 0.0,
-        "reason": f"kustomization.yaml found ({paths}) but does not reference target version {target_ver}",
+        "pass_": True,
+        "score": 1.0,
+        "reason": "No YAML nesting issues found in patches",
     }
 
 
