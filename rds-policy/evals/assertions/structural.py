@@ -20,6 +20,40 @@ def _fmt(name, passed, expected, actual):
     return f"{status} {name} | EXPECTED: {expected} | ACTUAL: {actual}"
 
 
+def check_parent_kustomization(_output, context):
+    """Agent must write or edit a kustomization.yaml that includes the target version directory."""
+    config = context["config"]
+    target_ver = config["target_version"]
+
+    written = collect_written_files(context)
+
+    kustomization_files = {
+        p: c for p, c in written.items() if "kustomization" in p.lower()
+    }
+
+    if not kustomization_files:
+        return {
+            "pass_": False,
+            "score": 0.0,
+            "reason": f"No kustomization.yaml found in written files. Written: {', '.join(written.keys()) or '(none)'}",
+        }
+
+    for path, content in kustomization_files.items():
+        if version_matches(content, target_ver):
+            return {
+                "pass_": True,
+                "score": 1.0,
+                "reason": f"kustomization.yaml at {path} references target version {target_ver}",
+            }
+
+    paths = ", ".join(kustomization_files.keys())
+    return {
+        "pass_": False,
+        "score": 0.0,
+        "reason": f"kustomization.yaml found ({paths}) but does not reference target version {target_ver}",
+    }
+
+
 def check_multi_pg_structure(_output, context):
     """Agent must preserve multi-PG file structure and apply version bumps to all."""
     config = context["config"]

@@ -100,7 +100,13 @@ def _check_profile_content(check, all_manifests):
     if m is None:
         return (name, False, f"manifest '{cr}'", "not found")
 
-    profiles = jmespath.search(check["profiles_path"], m) or []
+    raw_profiles = jmespath.search(check["profiles_path"], m) or []
+    profiles = []
+    for item in raw_profiles:
+        if isinstance(item, list):
+            profiles.extend(item)
+        elif isinstance(item, dict):
+            profiles.append(item)
     target_profile = check["profile_name_contains"]
     expected_content = check["data_contains"]
     expected_section = check.get("section_contains", "")

@@ -217,6 +217,12 @@ tests:
         metric: multi-pg-structure
         config:
           target_version: &tv "4.20"
+      # Verify parent kustomization.yaml updated with new version directory
+      - type: python
+        value: file://assertions/structural.py:check_parent_kustomization
+        metric: parent-kustomization
+        config:
+          target_version: *tv
 
       # ----- 3. Deterministic file checks -----
       # Config-driven checks on written YAML files. Each check maps to a
@@ -251,6 +257,13 @@ tests:
               cr: "source-crs/TunedPerformancePatch.yaml"
               path: "patches[].spec"
               contains: "kernel.timer_migration"
+            - name: tuned_sysctl_in_correct_profile
+              type: profile_content
+              cr: "source-crs/TunedPerformancePatch.yaml"
+              profiles_path: "patches[].spec.profile"
+              profile_name_contains: "performance"
+              data_contains: "kernel.timer_migration"
+              section_contains: "[sysctl]"
             - name: tuned_exists
               type: exists
               cr: "source-crs/TunedPerformancePatch.yaml"
@@ -288,6 +301,8 @@ tests:
       - type: regex
         value: "4[._-]20"
         metric: mentions-target-version
+      # Stale 4.18 in merged files is caught by multi-pg-structure
+      # (checks metadata.name, namespace, cluster-version label all have 4.20)
       # Does the agent discuss all key merge topics?
       - type: llm-rubric
         value: |
