@@ -6,16 +6,10 @@ Reference CRs and PolicyGenerator examples are extracted from the ZTP site
 generator container: `registry.redhat.io/openshift4/ztp-site-generate-rhel8:{version}`
 (e.g. `:4.18`, `:4.20`).
 
-Extract with:
-```
-podman pull registry.redhat.io/openshift4/ztp-site-generate-rhel8:{version}
-id=$(podman create registry.redhat.io/openshift4/ztp-site-generate-rhel8:{version})
-podman cp $id:/home/ztp/ {output_dir}
-podman rm $id
-```
-
-If a `fetch_reference` MCP tool is available, use it. Otherwise run
-extraction directly via shell.
+The content at `/home/ztp/` inside the image needs to be extracted to a
+local directory. Auto-discover which container tool is available at
+runtime (`oc`, `podman`, `docker`, `skopeo`) and compose the appropriate
+extraction commands.
 
 Container layout at `/home/ztp/`:
 - `source-crs/` -- individual CR YAML files (base templates). Directory
