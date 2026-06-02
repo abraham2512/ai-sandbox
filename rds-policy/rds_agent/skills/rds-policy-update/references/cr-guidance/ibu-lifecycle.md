@@ -10,9 +10,11 @@ The reference IBU lifecycle uses 3 stages, each in its own policy:
 ## Stage completeness check
 
 Compare the partner's IBU stage policies against the reference. If the
-partner is missing a stage the reference has, flag it as `[!]` for user
-review — do not silently skip it. The user may have a valid reason for
-omitting a stage, but they should confirm.
+partner is missing a stage the reference has (e.g. missing the Upgrade
+stage), flag it explicitly:
+`WARNING: partner IBU is missing the {stage} stage — reference has
+Prep, Upgrade, and Finalize.`
 
-When adding a missing stage policy, apply the partner's naming
-convention (version suffix, site suffix) to the new policy name.
+Do not add the missing stage — just warn. The partner may have a valid
+reason for omitting it, and adding unrequested content risks breaking
+their workflow.

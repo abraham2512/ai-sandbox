@@ -78,6 +78,15 @@ to merge.
    reorganization, new subdirectories, symlinks.
 5. **Classify each change**: path-only, content change, GVK replacement,
    new CR, removed CR, deprecated CR.
+   - For CRs with guidance in `references/cr-guidance/`, read that
+     guidance and use it to describe restructuring details — e.g.
+     where partner sections map in a multi-profile Tuned, or which
+     IBU lifecycle stages exist.
+   - When a CR's source file AND its PG entry both changed, describe
+     them together — e.g. ConsoleOperatorDisable: managementState
+     changed to Removed in the source-cr AND complianceType set to
+     mustnothave in the PG means the console is fully removed, not
+     just disabled.
 6. Save results and build a merge checklist with the actual CRs found.
 
 ## After EXPLAIN
@@ -144,12 +153,12 @@ All outputs (reports, checklist, merged policies) go inside this directory.
 - Policy CRD accepts unknown fields inside `objectDefinition` --
   dry-run only catches Policy wrapper errors, not embedded CR errors.
 
-- MERGE only touches what the partner already has. Do NOT add optional
-  or commented-out reference CRs into the partner's policies. Only add
-  CRs that are new and required in the target version. Optional CRs
-  are only added if the user explicitly requests them (via the "new
-  functionality" input). Process the partner's CRs one by one against
-  the reference changes -- not the other way around.
+- MERGE only touches what the partner already has. Do NOT add CRs,
+  stages, or fields the partner doesn't already have -- warn about
+  gaps instead. Even "required" reference CRs are only reported, not
+  injected. Only add new content if the user explicitly requests it
+  (via the "new functionality" input). Process the partner's CRs one
+  by one against the reference changes -- not the other way around.
 
 - Coverage scan and redundant overlay detection are in the Processing
   and Finish sections -- follow those procedures.
@@ -242,16 +251,24 @@ each item fully before starting the next one. Processing steps:
    reference CR change may affect multiple manifest entries across
    different policies. Apply the change to every instance. If patches
    differ between instances, handle each one separately.
-2. **Apply the change** if it doesn't conflict with partner customizations.
-   When the reference added new fields to an existing CR that the partner
-   hasn't patched, flag them as available -- do not inject them.
-   Mark as `[x]` in the checklist with a note of what changed.
-   - **Transparency on defaults:** when applying a recommended default
-     that overrides a partner-chosen value, this is still a conflict
-     even though you're auto-resolving it. Include both values and use
+2. **Apply the change** -- three cases depending on what the partner
+   patches vs what the reference changed:
+   - **Reference field changed between versions** (field existed in
+     BOTH source and target reference): apply the new value. If this
+     overrides a partner-chosen value, it's still a conflict -- use
      conflict language (e.g. "[x] CONFLICT: partner had priority 19,
-     applied reference default 18"). The user must see every place
-     where their chosen value was overridden.
+     applied reference default 18"). The user must see every override.
+   - **Partner has custom field, reference now adds it** (field was NOT
+     in the source reference but IS in the target reference): do NOT
+     update the partner's value -- flag it instead. The partner was
+     ahead of the reference; their override may be intentional or stale.
+   - **Reference added new fields partner doesn't patch**: flag as
+     available -- do not inject them.
+   - **Partner patches a field to the same value as the target
+     reference default** (redundant overlay): flag as `[~]` and tell
+     the user the patch is a no-op they can remove. Common example:
+     `installPlanApproval: Automatic` when the source-cr already
+     defaults to `Automatic`.
 3. **GVK replacement** -- when the checklist item is a GVK migration,
    update three things in the partner's manifest and patches:
    (a) manifest path to the new source-cr file,
@@ -275,16 +292,10 @@ each item fully before starting the next one. Processing steps:
    on, flag as `[!]`. The partner's patches become ineffective since
    the resource will be removed. Present options: accept mustnothave
    and remove patches, or keep the CR without mustnothave.
-6. **Redundant overlay check** -- for each field the partner patches,
-   read the target version's source-cr file and check the default value
-   for that same field. If the partner's patch sets a field to the exact
-   same value the source-cr already has, that patch is a no-op — it does
-   nothing. Mark as `[~]` in the checklist and tell the user:
-   `"[~] {field} is redundant — partner patches to {value} but
-   source-cr already defaults to {value}. Consider removing."`
-   Common examples: `installPlanApproval: Automatic` when the
-   Subscription source-cr already defaults to `Automatic`, or channel
-   values that match the source-cr default.
+6. **Redundant overlay check** -- apply the redundant overlay rule from
+   step 2 to every remaining patch field you haven't checked yet. Read
+   the target source-cr and compare. This sweep catches overlays that
+   per-item processing missed.
 7. **Flag for user review** if:
    - Partner has customized the same field the reference changed (true conflict)
    - Partner has pinned a value the checklist says to bump (e.g. older
