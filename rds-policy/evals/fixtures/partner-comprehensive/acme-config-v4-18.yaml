@@ -15,11 +15,6 @@ policies:
   policyAnnotations:
     ran.openshift.io/ztp-deploy-wave: "1"
   manifests:
-    - path: custom-crs/AcmeCatalogSource.yaml
-      patches:
-      - metadata:
-          labels:
-            lca.openshift.io/target-ocp-version: "4.18.13"
     - path: source-crs/ClusterMonitoringConfig.yaml
       patches:
       - data:
@@ -61,14 +56,6 @@ policies:
       - metadata:
           labels:
             acme-managed: "true"
-    - path: custom-crs/AcmeSecret.yaml
-      patches:
-      - metadata:
-          name: acme-app-secret
-          labels:
-            app: acme
-            data:
-              token: "abc123"
     - path: source-crs/StorageLV.yaml
       patches:
       - metadata:

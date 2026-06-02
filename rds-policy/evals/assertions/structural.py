@@ -22,36 +22,42 @@ def _fmt(name, passed, expected, actual):
 
 
 def check_yaml_nesting(_output, context):
-    """Verify data/spec/status are siblings of metadata, not nested under it.
+    """Verify the agent did not deepen pre-existing nesting errors.
 
-    The partner fixture includes a Secret with data incorrectly nested under
-    metadata. The agent should fix this during merge. If data appears under
-    metadata in any patch, the nesting is wrong.
+    The partner fixture has AcmeMonitoring patches with data nested under
+    metadata (a pre-existing bug). Per CNF-23302, the skill should preserve
+    the partner's original structure and flag as a pre-existing issue — not
+    fix it. This assertion checks that the agent did not make nesting WORSE
+    (e.g. adding additional keys under metadata that weren't there before).
     """
     written = collect_written_files(context)
     pg_docs, _ = parse_pg_docs(written)
     manifests = collect_manifests(pg_docs)
 
-    issues = []
+    known_preexisting = {"AcmeMonitoring"}
+    new_issues = []
     for m in manifests:
         path = m.get("path", "?")
         for patch in m.get("patches", []):
             if not isinstance(patch, dict):
                 continue
             meta = patch.get("metadata")
-            if isinstance(meta, dict) and "data" in meta:
-                issues.append(f"data nested under metadata in {path}")
+            if not isinstance(meta, dict) or "data" not in meta:
+                continue
+            if any(known.lower() in path.lower() for known in known_preexisting):
+                continue
+            new_issues.append(f"data nested under metadata in {path}")
 
-    if issues:
+    if new_issues:
         return {
             "pass_": False,
             "score": 0,
-            "reason": f"YAML nesting issues: {'; '.join(issues)}",
+            "reason": f"New YAML nesting issues (not pre-existing): {'; '.join(new_issues)}",
         }
     return {
         "pass_": True,
         "score": 1.0,
-        "reason": "No YAML nesting issues found in patches",
+        "reason": "No new YAML nesting issues — pre-existing issues preserved as expected",
     }
 
 

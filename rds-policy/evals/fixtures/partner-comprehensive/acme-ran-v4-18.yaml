@@ -16,6 +16,11 @@ policies:
     ran.openshift.io/ztp-deploy-wave: "10"
   manifests:
     - path: custom-crs/AcmeMonitoring.yaml
+      patches:
+      - metadata:
+          name: acme-monitoring-config
+          data:
+            extra-key: "nested-under-metadata"
     - path: source-crs/PtpConfigSlave.yaml
       patches:
       - spec:

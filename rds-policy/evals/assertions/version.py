@@ -48,9 +48,13 @@ def check_semver_sweep(_output, context):
         if filepath.endswith(".md"):
             continue
         for line_num, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            value_part = re.split(r"\s+#\s", line, maxsplit=1)[0]
             for pat in patterns:
-                if pat.search(line):
-                    hits.append(f"{filepath}:{line_num}: {line.strip()[:100]}")
+                if pat.search(value_part):
+                    hits.append(f"{filepath}:{line_num}: {stripped[:100]}")
 
     if hits:
         return {

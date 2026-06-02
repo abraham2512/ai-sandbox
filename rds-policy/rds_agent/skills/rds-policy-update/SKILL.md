@@ -243,8 +243,8 @@ each item fully before starting the next one. Processing steps:
    different policies. Apply the change to every instance. If patches
    differ between instances, handle each one separately.
 2. **Apply the change** if it doesn't conflict with partner customizations.
-   This includes new fields the reference added to an existing CR -- if
-   the partner hasn't patched that field, add it to their patches.
+   When the reference added new fields to an existing CR that the partner
+   hasn't patched, flag them as available -- do not inject them.
    Mark as `[x]` in the checklist with a note of what changed.
    - **Transparency on defaults:** when applying a recommended default
      that overrides a partner-chosen value, this is still a conflict
@@ -336,8 +336,8 @@ re-read to confirm the fix.
 4. **New reference field sweep** -- for every manifest the partner uses,
    compare the partner's patch fields against the target version's
    source-cr. If the source-cr added a new field the partner doesn't
-   patch (e.g. `ptpSchedulingPolicy`), add it to the partner's patches
-   and note it in the checklist.
+   patch (e.g. `ptpSchedulingPolicy`), flag it as available in the
+   checklist -- do not inject it into the partner's patches.
 5. **Semver sweep on written files** -- read each written PG file and
    search for any remaining occurrence of the source version (e.g.
    `4.18`). This catches version-bearing annotations, image tags, and

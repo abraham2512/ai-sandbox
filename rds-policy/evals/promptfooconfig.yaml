@@ -180,7 +180,7 @@ tests:
   #     NMState with custom label             → tests CR removal
   #     StorageLV with sizePercent            → tests wave change + patch preservation
   #   acme-ran-v4-18.yaml (wave 10):
-  #     AcmeMonitoring                        → tests partner-only CR preservation
+  #     AcmeMonitoring + nesting bug          → tests partner-only CR + YAML nesting (CNF-23302)
   #     PtpConfigSlave ens7f0                 → tests PTP replication instance 1
   #     AcmePtpConfig                         → tests duplicate CR detection
   #     TunedPerformancePatch priority 19     → tests list merge + priority conflict
@@ -272,12 +272,10 @@ tests:
             - name: partner_custom_cr_preserved
               type: exists
               cr: "AcmeMonitoring"
-            # -- New ref fields (PTP scheduling) --
-            # Match "PtpConfigSlave" without .yaml so it also matches
-            # PtpConfigSlave-SetSelector.yaml if the agent switched.
-            - name: ptp_scheduling_fields
-              cr: "PtpConfigSlave"
-              path: "patches[].spec.profile[].ptpSchedulingPolicy"
+            # -- PTP scheduling fields (ptpSchedulingPolicy, ptpSchedulingPriority) --
+            # These live in the source CR, not in patches. The partner gets them
+            # automatically by referencing the 4.20 source CR. Per Ian's principle,
+            # don't check for injection — setselector-enforcement rubric covers PTP.
             # -- CR replication (both PTP interfaces preserved) --
             - name: ptp_interface_ens7f0
               cr: "PtpConfigSlave"
@@ -295,10 +293,10 @@ tests:
             - name: storagelv_patch_preserved
               cr: "StorageLV"
               path: "patches[].spec.storage.deviceClasses[].thinPoolConfig.sizePercent"
-            # -- CatalogSource custom CR preserved (A3/B1/B12) --
-            - name: catalogsource_custom_cr_preserved
+            # -- AcmeMonitoring custom CR preserved (B1/B12) --
+            - name: monitoring_custom_cr_preserved
               type: exists
-              cr: "AcmeCatalogSource"
+              cr: "AcmeMonitoring"
             # -- Tuned [scheduler] content preserved across restructure (A5) --
             - name: tuned_scheduler_preserved
               cr: "TunedPerformancePatch"
@@ -316,11 +314,10 @@ tests:
             - name: old_monitoring_cr_removed
               type: not_exists
               cr: "ClusterMonitoringConfig"
-            # -- OAuth new fields added or flagged (B3) --
-            - name: oauth_new_fields
-              cr: "OAuthLDAP"
-              path: "patches[].spec.identityProviders[].ldap"
-              contains: "insecure"
+            # -- OAuth new fields flagged (B3) --
+            # Per Ian's principle: don't inject new reference fields into
+            # partner patches. Agent should flag them as available, not add.
+            # Moved to llm-rubric (oauth-new-fields-flagged) below.
             # -- IBU exists in output (A2 — seedImageRef caught by semver-sweep) --
             - name: ibu_exists
               type: exists
@@ -337,8 +334,9 @@ tests:
           source_version: "4.18"
 
       # ----- 5. YAML nesting validation (CNF-23302) -----
-      # Partner fixture has a Secret with data nested under metadata.
-      # Agent should fix the nesting so data is a sibling of metadata.
+      # Partner fixture has AcmeMonitoring patches with data nested under metadata
+      # (pre-existing bug). Agent should preserve it and flag — not fix it.
+      # This assertion checks the agent didn't introduce NEW nesting issues.
       - type: python
         value: file://assertions/structural.py:check_yaml_nesting
         metric: yaml-nesting
@@ -516,14 +514,29 @@ tests:
         metric: setselector-enforcement
         transform: file://assertions/common.py:enrich_output
 
+      # Does it flag new OAuth fields available in 4.20 reference? (B3)
+      - type: llm-rubric
+        value: |
+          The 4.20 reference OAuthLDAP added new fields (insecure, ca,
+          bindPassword, attributes, mappingMethod) that the partner's
+          patch does not include. The agent should mention or flag these
+          new fields as available — NOT necessarily add them to the
+          output, but inform the partner they exist in the new reference.
+          Score 1.0 if new OAuth fields mentioned/flagged, 0.5 if OAuth
+          changes mentioned generally, 0.0 if not mentioned.
+        threshold: 0.5
+        metric: oauth-new-fields-flagged
+        transform: file://assertions/common.py:enrich_output
+
       # Does it flag version-bearing fields beyond PG metadata? (A1/A3)
       - type: llm-rubric
         value: |
           The partner fixture has version-bearing fields beyond PG metadata:
           LCA annotations (lca.openshift.io/target-ocp-version: "4.18.13")
-          on StorageLV and CatalogSource, and a CatalogSource image tag
-          containing "1.3.0". The agent should flag or update ALL of these
-          during the semver sweep, not just the PG metadata fields.
+          on StorageLV and AcmeMonitoring, and an AcmeMonitoring data field
+          containing a catalog image tag "1.3.0". The agent should flag or
+          update ALL of these during the semver sweep, not just the PG
+          metadata fields.
           Score 1.0 if version annotations AND image tag are addressed,
           0.5 if at least one is addressed, 0.0 if neither is mentioned.
         threshold: 0.5
@@ -534,7 +547,7 @@ tests:
       - type: llm-rubric
         value: |
           The partner uses custom-crs/ paths for partner-specific CRs
-          (AcmeSecret, AcmeMonitoring, AcmePtpConfig, AcmeCatalogSource).
+          (AcmeMonitoring, AcmePtpConfig).
           The agent must preserve these custom-crs/ paths in the output
           PolicyGenerator files — NOT replace them with reference paths.
           Score 1.0 if all custom-crs/ paths preserved,
@@ -548,7 +561,7 @@ tests:
         value: |
           The partner's policies contain pre-existing issues not caused by
           the version upgrade. A thorough agent should flag at least some:
-          1. AcmeSecret has data nested under metadata (YAML structural bug)
+          1. AcmeMonitoring has data nested under metadata in patches (YAML structural bug)
           2. AcmeMonitoring references "restic-backup" (deprecated terminology)
           The agent should mention at least one pre-existing concern.
           Score 1.0 if both flagged, 0.5 if one flagged, 0.0 if neither.
