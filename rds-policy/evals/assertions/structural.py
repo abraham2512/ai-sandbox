@@ -11,14 +11,10 @@ removal) are handled by config-driven checks in merge.py:check_file_content.
 from common import (
     collect_manifests,
     collect_written_files,
+    fmt_check,
     parse_pg_docs,
     version_matches,
 )
-
-
-def _fmt(name, passed, expected, actual):
-    status = "PASS" if passed else "FAIL"
-    return f"{status} {name} | EXPECTED: {expected} | ACTUAL: {actual}"
 
 
 def check_yaml_nesting(_output, context):
@@ -124,7 +120,7 @@ def check_multi_pg_structure(_output, context):
             {
                 "pass_": bool(passed),
                 "score": 1.0 if passed else 0.0,
-                "reason": _fmt(name, passed, expected, actual),
+                "reason": fmt_check(name, passed, expected, actual),
             }
             for name, passed, expected, actual in checks
         ],

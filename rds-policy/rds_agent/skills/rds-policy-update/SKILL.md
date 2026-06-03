@@ -72,8 +72,10 @@ to merge.
    if no local ref directories are found.
 2. **Diff PolicyGenerator examples** (`acm-*-ranGen.yaml`) between versions.
    These are the high-level view of what changed.
-3. **Diff source-crs content** -- for CRs that changed, compare the actual
-   source CR files (not just paths).
+3. **Diff source-crs content** -- compare EVERY source-cr file that
+   differs between versions, not just the ones with obvious changes.
+   Even a single added field matters -- it may conflict with a partner
+   patch or represent a new default the partner should know about.
 4. **Detect structural changes** -- new/removed files, directory
    reorganization, new subdirectories, symlinks.
 5. **Classify each change**: path-only, content change, GVK replacement,
@@ -292,10 +294,12 @@ each item fully before starting the next one. Processing steps:
    on, flag as `[!]`. The partner's patches become ineffective since
    the resource will be removed. Present options: accept mustnothave
    and remove patches, or keep the CR without mustnothave.
-6. **Redundant overlay check** -- apply the redundant overlay rule from
-   step 2 to every remaining patch field you haven't checked yet. Read
-   the target source-cr and compare. This sweep catches overlays that
-   per-item processing missed.
+6. **Redundant overlay check** (mandatory, do not skip) -- after
+   applying the checklist item's change, check EVERY other patch field
+   on the same manifest against the target source-cr. If a patch field
+   sets the same value the source-cr already has, mark as `[~]`
+   redundant. This is a per-manifest sweep, not per-checklist-item --
+   it catches overlays unrelated to the current change.
 7. **Flag for user review** if:
    - Partner has customized the same field the reference changed (true conflict)
    - Partner has pinned a value the checklist says to bump (e.g. older
@@ -423,6 +427,9 @@ won't process the new version's policies.
       `{name}: not included (optional)`
       Use "optional" and do NOT use "WARNING" or "required."
    d. Do not add missing CRs -- just report them with correct severity.
+   e. Output each line individually in your response to the user --
+      do not summarize as a count (e.g. "6 missing CRs"). The user
+      must see every CR name and its severity.
 2. **Present the merge checklist** -- by this point every item in
    `checklist.md` in the output directory must have
    a status. This is mandatory, not a free-form summary. Every CR the

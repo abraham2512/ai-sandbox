@@ -19,13 +19,9 @@ from common import (
     collect_manifests,
     collect_written_files,
     find_first,
+    fmt_check,
     parse_pg_docs,
 )
-
-
-def _fmt(name, passed, expected, actual):
-    status = "PASS" if passed else "FAIL"
-    return f"{status} {name} | EXPECTED: {expected} | ACTUAL: {actual}"
 
 
 def _run_check(check, all_manifests, manifest_paths):
@@ -273,7 +269,7 @@ def check_file_content(_output, context):
             {
                 "pass_": bool(passed),
                 "score": 1.0 if passed else 0.0,
-                "reason": _fmt(name, passed, expected, actual),
+                "reason": fmt_check(name, passed, expected, actual),
             }
             for name, passed, expected, actual in checks
         ],

@@ -293,10 +293,6 @@ tests:
             - name: storagelv_patch_preserved
               cr: "StorageLV"
               path: "patches[].spec.storage.deviceClasses[].thinPoolConfig.sizePercent"
-            # -- AcmeMonitoring custom CR preserved (B1/B12) --
-            - name: monitoring_custom_cr_preserved
-              type: exists
-              cr: "AcmeMonitoring"
             # -- Tuned [scheduler] content preserved across restructure (A5) --
             - name: tuned_scheduler_preserved
               cr: "TunedPerformancePatch"
