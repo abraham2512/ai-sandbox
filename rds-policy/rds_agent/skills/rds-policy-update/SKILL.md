@@ -357,7 +357,7 @@ re-read to confirm the fix.
    search for any remaining occurrence of the source version (e.g.
    `4.18`). This catches version-bearing annotations, image tags, and
    labels that the version bumping step missed. If found, update them
-   or mark with `⚠ REVIEW` in the file itself (not just the checklist).
+   and note the change in `checklist.md`.
 
 Preserve the partner's original YAML quoting conventions exactly.
 Different quote styles (`"value"` vs `'value'` vs `value`) can
@@ -372,7 +372,8 @@ After processing all checklist items, walk the version-bumping section:
 - Update Namespace and ManagedClusterSetBinding resources
 - For CatalogSource image tags: update those that track the OCP version.
   If a tag doesn't match the current version (partner pinned it to
-  something else), mark with `⚠ REVIEW` and ask the user.
+  something else), flag as `[~] ⚠ REVIEW` in the checklist and
+  preserve the partner's value.
 
 ### Semver Sweep
 
@@ -380,11 +381,11 @@ After version bumping, scan ALL output files — PolicyGenerator YAML,
 kustomization.yaml, and any other written file — for any remaining
 occurrence of the source OCP version (e.g. `4.18`, `4-18`, `4_18`).
 
-**General rule:** every match is wrong until proven otherwise. If the
-user asked for recommended defaults, update it. If you're unsure
-whether a value tracks the OCP version, update it anyway and note
-the change in the checklist — a false update is easy to revert, but
-a missed stale version can break a cluster upgrade.
+**General rule:** every match is suspicious. If the value clearly tracks
+the OCP version (channel, namespace suffix, annotation), update it.
+If you're unsure whether a value tracks the OCP version, flag it in
+the checklist as `[~] ⚠ REVIEW` and preserve the partner's value —
+a false update can break partner-specific pinning.
 
 Common locations this catches:
 - `lca.openshift.io/target-ocp-version` annotations

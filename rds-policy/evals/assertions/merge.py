@@ -134,9 +134,7 @@ def check_no_unrequested_crs(_output, context):
     pg_docs, _ = parse_pg_docs(written)
     manifests = collect_manifests(pg_docs)
     paths = [m.get("path", "") for m in manifests]
-    injected = [
-        cr for cr in forbidden if any(cr.lower() in p.lower() for p in paths)
-    ]
+    injected = [cr for cr in forbidden if any(cr.lower() in p.lower() for p in paths)]
     if injected:
         return {
             "pass_": False,
@@ -210,9 +208,7 @@ def check_quote_preservation(_output, context):
     config = context.get("config") or {}
     expected = config.get("expected_patterns", [])
     written = collect_written_files(context)
-    content = "\n".join(
-        c for p, c in written.items() if p.endswith((".yaml", ".yml"))
-    )
+    content = "\n".join(c for p, c in written.items() if p.endswith((".yaml", ".yml")))
     missing = [p for p in expected if p not in content]
     if missing:
         return {

@@ -36,7 +36,14 @@ def check_semver_sweep(_output, context):
             "reason": "No PolicyGenerator docs found in written files",
         }
 
-    major, minor = source_version.split(".")
+    parts = source_version.split(".")
+    if len(parts) < 2:
+        return {
+            "pass_": False,
+            "score": 0,
+            "reason": f"Invalid source_version '{source_version}' (expected major.minor)",
+        }
+    major, minor = parts[0], parts[1]
     patterns = [
         re.compile(rf"{major}\.{minor}(?!\d)"),
         re.compile(rf"{major}-{minor}(?!\d)"),

@@ -56,4 +56,4 @@ policies:
     - path: source-crs/ImageBasedUpgrade.yaml
       patches:
       - spec:
-          stage: Finalize
+          stage: Idle
