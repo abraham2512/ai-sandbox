@@ -1,0 +1,38 @@
+# SandboxTemplate using OpenShell supervisor for sandbox isolation.
+# Drop-in replacement for 05-sandbox-template.yaml.
+# Uses rds-policy-openshell image which has the supervisor as PID 1.
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
+metadata:
+  name: lightspeed-agent
+  namespace: openshift-lightspeed
+spec:
+  networkPolicyManagement: Unmanaged
+  podTemplate:
+    spec:
+      containers:
+        - name: agent
+          image: REPLACE_REGISTRY/rds-policy-openshell:latest
+          env:
+            - name: HOME
+              value: /tmp
+            - name: ANTHROPIC_VERTEX_PROJECT_ID
+              value: REPLACE_GCP_PROJECT_ID
+            - name: CLOUD_ML_REGION
+              value: REPLACE_GCP_REGION
+          volumeMounts:
+            - name: skills
+              mountPath: /app/skills
+              readOnly: true
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+            requests:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: skills
+          image:
+            reference: placeholder
+            pullPolicy: Always

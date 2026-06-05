@@ -1,0 +1,22 @@
+apiVersion: agentic.openshift.io/v1alpha1
+kind: Proposal
+metadata:
+  name: rds-policy-explain
+  namespace: openshift-lightspeed
+  labels:
+    agentic.openshift.io/source: rds-policy
+spec:
+  request: |
+    Explain the RDS Day 2 configuration policy changes between
+    OpenShift 4.18 and 4.20. Identify which reference CRs changed,
+    what was added or removed, and summarize the impact on existing
+    partner PolicyGenerator customizations.
+  targetNamespaces:
+    - openshift-lightspeed
+  tools:
+    skills:
+      - image: REPLACE_REGISTRY/rds-policy-agent:latest
+        paths:
+          - /app/skills/rds-policy-update
+  analysis:
+    agent: smart

@@ -1,0 +1,41 @@
+# Base SandboxTemplate for the agentic operator.
+# The operator derives step-specific templates from this base,
+# patching in skills images, LLM credentials, and secrets per Proposal.
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
+metadata:
+  name: lightspeed-agent
+  namespace: openshift-lightspeed
+spec:
+  networkPolicyManagement: Unmanaged
+  podTemplate:
+    spec:
+      containers:
+        - name: agent
+          image: REPLACE_REGISTRY/lightspeed-agentic-sandbox:latest
+          env:
+            # Writable HOME required for Claude Code CLI config files.
+            - name: HOME
+              value: /tmp
+            # Operator sets GCP_PROJECT/GCP_REGION but Claude Code CLI
+            # expects ANTHROPIC_VERTEX_PROJECT_ID/CLOUD_ML_REGION.
+            - name: ANTHROPIC_VERTEX_PROJECT_ID
+              value: REPLACE_GCP_PROJECT_ID
+            - name: CLOUD_ML_REGION
+              value: REPLACE_GCP_REGION
+          volumeMounts:
+            - name: skills
+              mountPath: /app/skills
+              readOnly: true
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+            requests:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: skills
+          image:
+            reference: placeholder
+            pullPolicy: Always
