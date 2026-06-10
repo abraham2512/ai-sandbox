@@ -1,7 +1,7 @@
 # TunedPerformancePatch — Restructure Guidance
 
-Between 4.18 and 4.20 the reference TunedPerformancePatch changed from
-a single profile to 4 architecture-specific profiles:
+The reference TunedPerformancePatch was restructured from a single
+profile to 4 architecture-specific profiles:
 
 - `ran-du-performance` — top-level, includes `ran-du-performance-architecture-common`
 - `ran-du-performance-architecture-common` — cross-arch settings
