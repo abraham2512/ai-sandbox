@@ -9,6 +9,11 @@ import yaml
 PG_REQUIRED_KEYS = {"metadata", "policyDefaults", "policies"}
 
 
+def fmt_check(name, passed, expected, actual):
+    status = "PASS" if passed else "FAIL"
+    return f"{status} {name} | EXPECTED: {expected} | ACTUAL: {actual}"
+
+
 def collect_written_files(context=None):
     """Read all files the agent wrote, extracted from toolCalls metadata.
 
@@ -147,7 +152,7 @@ def check_written_files(output, context, _options=None):
     config = (context or {}).get("config") or {}
     expected = config.get("expected_files", [])
     if not expected:
-        return {"pass": True, "score": 1.0, "reason": "No expected files configured"}
+        return {"pass_": True, "score": 1.0, "reason": "No expected files configured"}
 
     written = collect_written_files(context)
     filenames = {p.rsplit("/", 1)[-1] for p in written}
@@ -155,12 +160,12 @@ def check_written_files(output, context, _options=None):
     missing = [f for f in expected if f not in filenames]
     if missing:
         return {
-            "pass": False,
+            "pass_": False,
             "score": 0.0,
             "reason": f"Missing files: {', '.join(missing)} | Written: {', '.join(sorted(filenames))}",
         }
     return {
-        "pass": True,
+        "pass_": True,
         "score": 1.0,
         "reason": f"All expected files written: {', '.join(expected)}",
     }

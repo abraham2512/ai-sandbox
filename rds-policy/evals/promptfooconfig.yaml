@@ -19,8 +19,8 @@ providers:
         - Glob
         - AskUserQuestion
       permission_mode: 'acceptEdits'
-      max_budget_usd: 3.00
-      max_turns: 40
+      max_budget_usd: 4.00
+      max_turns: 60
       ask_user_question:
         behavior: first_option
       persist_session: false
@@ -157,41 +157,52 @@ tests:
   # Fixture: partner-comprehensive/ (2 PolicyGenerator files)
   # Covers every merge scenario in one end-to-end session.
   #
-  # Reference changes (9 source CRs + PG examples):
+  # Reference changes (12 source CRs + PG examples):
   #   DisconnectedICSP → DisconnectedIDMS    GVK migration
   #   TunedPerformancePatch 1→4 profiles     list restructure
   #   SubscriptionOCP channel 4.18→4.20      version bump
   #   NMStateOperator removed in 4.20        CR removal
   #   StorageLV wave 2→10                    wave change
   #   ConsoleOperatorDisable mustnothave      complianceType change
-  #   PtpConfigSlave scheduling fields        new ref fields (should NOT be injected)
+  #   PtpConfigSlave scheduling fields        new ref fields
   #   SriovFecClusterConfig                   in ref, not in partner
+  #   ClusterMonitoringConfig → ReduceMonitoringFootprint  CR replacement (B2)
+  #   OAuthLDAP new fields in 4.20           list field additions (B3)
+  #   ImageBasedUpgrade Prep/Upgrade/Finalize IBU lifecycle (A2/B4)
   #
-  # Partner fixture (2 PG files):
+  # Partner fixture (3 PG files + kustomization.yaml):
   #   acme-config-v4-18.yaml (wave 1-2):
+  #     ClusterMonitoringConfig + hub template → tests CR replacement (B2) + namespace (B9)
   #     ICSP with mirror patch               → tests GVK migration
   #     ConsoleOperatorDisable logLevel       → tests mustnothave conflict
+  #     OAuthLDAP with minimal fields + quote → tests new fields (B3) + quoting (B11)
   #     Subscription channel + planApproval   → tests conflict + redundant overlay
   #     NMState with custom label             → tests CR removal
   #     StorageLV with sizePercent            → tests wave change + patch preservation
   #   acme-ran-v4-18.yaml (wave 10):
-  #     AcmeMonitoring                        → tests partner-only CR preservation
+  #     AcmeMonitoring + nesting bug          → tests partner-only CR + YAML nesting (CNF-23302)
   #     PtpConfigSlave ens7f0                 → tests PTP replication instance 1
   #     AcmePtpConfig                         → tests duplicate CR detection
   #     TunedPerformancePatch priority 19     → tests list merge + priority conflict
   #     PtpConfigSlave ens8f0 (separate policy) → tests PTP replication instance 2
+  #   acme-upgrade-v4-18.yaml (wave 100):
+  #     IBU Prep with seedImageRef 4.18.6     → tests semver sweep (A2)
+  #     IBU Finalize (missing Upgrade stage)  → tests stage completeness (B4)
+  #   kustomization.yaml                      → tests parent kustomization update (B10)
   #
   # Assertions are grouped by type:
   #   1. Activation + safety       skill loaded, no unsafe kubectl apply
   #   2. Artifact checks           expected files written, PG structure valid
   #   3. Deterministic file checks config-driven YAML content verification
-  #   4. Semantic rubric checks    LLM judge scores communication quality
-  #   5. Logging                   AskUserQuestion call recording
+  #   4. Version sweep             no source version remaining in output
+  #   5. YAML nesting validation   data/spec not nested under metadata
+  #   6. Semantic rubric checks    LLM judge scores communication quality
+  #   7. Logging                   AskUserQuestion call recording
   # ============================================================
 
   - description: "T2 COMPREHENSIVE MERGE — all merge behaviors"
     vars:
-      prompt: "upgrade my policies from 4.18 to 4.20. the policy source is partner-comprehensive/ which has two PolicyGenerator files. do the full EXPLAIN and MERGE end-to-end, use recommended defaults for any conflicts"
+      prompt: "upgrade my policies from 4.18 to 4.20. the policy source is partner-comprehensive/ which has three PolicyGenerator files and a kustomization.yaml. do the full EXPLAIN and MERGE end-to-end, use recommended defaults for any conflicts"
     assert:
       # ----- 1. Activation + safety -----
       - type: skill-used
@@ -217,12 +228,6 @@ tests:
         metric: multi-pg-structure
         config:
           target_version: &tv "4.20"
-      # Verify parent kustomization.yaml updated with new version directory
-      - type: python
-        value: file://assertions/structural.py:check_parent_kustomization
-        metric: parent-kustomization
-        config:
-          target_version: *tv
 
       # ----- 3. Deterministic file checks -----
       # Config-driven checks on written YAML files. Each check maps to a
@@ -235,74 +240,140 @@ tests:
           target_version: *tv
           checks:
             # -- GVK migration (ICSP → IDMS) --
+            # CR patterns use filenames only (no directory prefix) so they
+            # match regardless of the agent's source-crs path convention
+            # (source-crs/, source-crs-4.20/, etc.).
             - name: idms_exists
               type: exists
-              cr: "source-crs/DisconnectedIDMS.yaml"
+              cr: "DisconnectedIDMS"
             - name: icsp_removed
               type: not_exists
-              cr: "source-crs/DisconnectedICSP.yaml"
+              cr: "DisconnectedICSP"
             - name: idms_mirrors_populated
-              cr: "source-crs/DisconnectedIDMS.yaml"
+              cr: "DisconnectedIDMS"
               path: "patches[].spec.imageDigestMirrors"
-            - name: old_icsp_structure_absent
-              cr: "source-crs/DisconnectedIDMS.yaml"
+            - name: icsp_mirrors_absent
+              cr: "DisconnectedIDMS"
               path: "patches[].spec.repositoryDigestMirrors"
               empty: true
             - name: partner_mirror_preserved
-              cr: "source-crs/DisconnectedIDMS.yaml"
+              cr: "DisconnectedIDMS"
               path: "patches[].spec.imageDigestMirrors"
               contains: "registry.acme.example.com"
             # -- List merge (Tuned restructure) --
             - name: tuned_sysctl_preserved
-              cr: "source-crs/TunedPerformancePatch.yaml"
+              cr: "TunedPerformancePatch"
               path: "patches[].spec"
               contains: "kernel.timer_migration"
-            - name: tuned_sysctl_in_correct_profile
-              type: profile_content
-              cr: "source-crs/TunedPerformancePatch.yaml"
-              profiles_path: "patches[].spec.profile"
-              profile_name_contains: "performance"
-              data_contains: "kernel.timer_migration"
-              section_contains: "[sysctl]"
             - name: tuned_exists
               type: exists
-              cr: "source-crs/TunedPerformancePatch.yaml"
+              cr: "TunedPerformancePatch"
             # -- Partner-only CR preservation --
             - name: partner_custom_cr_preserved
               type: exists
-              cr: "custom-crs/AcmeMonitoring.yaml"
-            # -- No injection of new ref fields partner didn't customize --
-            - name: ptp_scheduling_not_injected
-              cr: "source-crs/PtpConfigSlave.yaml"
-              path: "patches[].spec.profile[].ptpSchedulingPolicy"
-              empty: true
+              cr: "AcmeMonitoring"
+            # -- PTP scheduling fields (ptpSchedulingPolicy, ptpSchedulingPriority) --
+            # These live in the source CR, not in patches. The partner gets them
+            # automatically by referencing the 4.20 source CR. Per Ian's principle,
+            # don't check for injection — setselector-enforcement rubric covers PTP.
             # -- CR replication (both PTP interfaces preserved) --
             - name: ptp_interface_ens7f0
-              cr: "source-crs/PtpConfigSlave.yaml"
+              cr: "PtpConfigSlave"
               path: "patches[].spec.profile[].interface"
               contains: "ens7f0"
             - name: ptp_interface_ens8f0
-              cr: "source-crs/PtpConfigSlave.yaml"
+              cr: "PtpConfigSlave"
               path: "patches[].spec.profile[].interface"
               contains: "ens8f0"
             # -- CR removal (NMState dropped in 4.20) --
             - name: nmstate_removed
               type: not_exists
-              cr: "source-crs/NMStateOperator.yaml"
+              cr: "NMStateOperator"
             # -- Patch preservation (StorageLV customization) --
             - name: storagelv_patch_preserved
-              cr: "source-crs/StorageLV.yaml"
+              cr: "StorageLV"
               path: "patches[].spec.storage.deviceClasses[].thinPoolConfig.sizePercent"
+            # -- Tuned [scheduler] content preserved across restructure (A5) --
+            - name: tuned_scheduler_preserved
+              cr: "TunedPerformancePatch"
+              path: "patches[].spec"
+              contains: "group.ice-ptp"
+            # -- Tuned [service] content preserved across restructure (A5) --
+            - name: tuned_service_preserved
+              cr: "TunedPerformancePatch"
+              path: "patches[].spec"
+              contains: "service.stalld"
+            # -- CR replacement: monitoring (B2) --
+            - name: monitoring_cr_replaced
+              type: exists
+              cr: "ReduceMonitoringFootprint"
+            - name: old_monitoring_cr_removed
+              type: not_exists
+              cr: "ClusterMonitoringConfig"
+            # -- OAuth new fields flagged (B3) --
+            # Per Ian's principle: don't inject new reference fields into
+            # partner patches. Agent should flag them as available, not add.
+            # Moved to llm-rubric (oauth-new-fields-flagged) below.
+            # -- IBU exists in output (A2 — seedImageRef caught by semver-sweep) --
+            - name: ibu_exists
+              type: exists
+              cr: "ImageBasedUpgrade"
 
-      # ----- 4. Semantic rubric checks -----
+      # ----- 4. Version sweep (CNF-23295) -----
+      # No source version (4.18) should remain in the output PG files.
+      # Catches missed version bumps in metadata, namespaces, channels,
+      # labels, annotations, and arbitrary fields.
+      - type: python
+        value: file://assertions/version.py:check_semver_sweep
+        metric: semver-sweep
+        config:
+          source_version: "4.18"
+
+      # ----- 5. YAML nesting validation (CNF-23302) -----
+      # Partner fixture has AcmeMonitoring patches with data nested under metadata
+      # (pre-existing bug). Agent should preserve it and flag — not fix it.
+      # This assertion checks the agent didn't introduce NEW nesting issues.
+      - type: python
+        value: file://assertions/structural.py:check_yaml_nesting
+        metric: yaml-nesting
+
+      # ----- 5b. No unrequested reference CRs injected (B12) -----
+      - type: python
+        value: file://assertions/merge.py:check_no_unrequested_crs
+        metric: no-unrequested-crs
+        config:
+          forbidden_crs:
+            - "PtpConfigBoundary"
+
+      # ----- 5c. Hub template namespace updated (B9) -----
+      - type: python
+        value: file://assertions/merge.py:check_hub_template_namespace
+        metric: hub-template-namespace
+        config:
+          source_namespace_pattern: "v4-18"
+
+      # ----- 5d. Parent kustomization.yaml updated (B10) -----
+      - type: python
+        value: file://assertions/merge.py:check_kustomization_updated
+        metric: kustomization-updated
+        config:
+          target_version: *tv
+
+      # ----- 5e. YAML quote preservation (B11) -----
+      - type: python
+        value: file://assertions/merge.py:check_quote_preservation
+        metric: quote-preservation
+        config:
+          expected_patterns:
+            - '{"apiVersion":"config.openshift.io/v1"}'
+
+      # ----- 6. Semantic rubric checks -----
       # LLM judge evaluates communication quality. Assertions that need to
       # see file contents use the enrich_output transform (appends written
       # .md files to output before the judge scores it).
       - type: regex
         value: "4[._-]20"
         metric: mentions-target-version
-      # Stale 4.18 in merged files is caught by multi-pg-structure
-      # (checks metadata.name, namespace, cluster-version label all have 4.20)
       # Does the agent discuss all key merge topics?
       - type: llm-rubric
         value: |
@@ -360,16 +431,22 @@ tests:
           with removal context, 0.0 if not mentioned.
         threshold: 0.5
         metric: mustnothave-warning
-      # Does it notice the Tuned restructure? (optional — threshold 0.0)
+      # Does it handle the Tuned restructure AND preserve partner sections? (A5/B6/B8)
       - type: llm-rubric
         value: |
-          The agent acknowledged that TunedPerformancePatch was restructured
-          from 1 profile to multiple profiles (architecture-specific sub-profiles)
-          in the 4.20 reference. This is a significant structural change.
-          Score 1.0 if restructure clearly described, 0.5 if briefly noted,
-          0.0 if not mentioned. This is optional — passing with 0.0 is acceptable.
-        threshold: 0.0
-        metric: list-merge-awareness
+          TunedPerformancePatch was restructured from 1 profile to 4
+          architecture-specific profiles in 4.20. The partner had custom
+          [sysctl] (kernel.timer_migration=0), [scheduler] (ice-ptp,
+          ice-gnss, ice-dplls), and [service] (stalld, chronyd) sections.
+          The agent should:
+          1. Acknowledge the restructure (1→4 profiles)
+          2. Explain where the partner's custom sections end up
+          Score 1.0 if restructure acknowledged AND placement explained,
+          0.5 if restructure acknowledged without placement detail,
+          0.0 if not mentioned.
+        threshold: 0.49
+        metric: tuned-restructure-completeness
+        transform: file://assertions/common.py:enrich_output
       # Does it flag the redundant installPlanApproval overlay?
       - type: llm-rubric
         value: |
@@ -406,8 +483,102 @@ tests:
         threshold: 0.5
         metric: checklist-quality
         transform: file://assertions/common.py:enrich_output
+      # Does it flag AcmePtpConfig as a partner-created CR variant? (CNF-23297)
+      - type: llm-rubric
+        value: |
+          The partner has a custom-crs/AcmePtpConfig.yaml which is a
+          partner-created variant of the reference PtpConfig CRs. The agent
+          should notice this is a partner-specific CR (custom source-CR or
+          duplicate of a reference CR) and either preserve it unchanged or
+          flag it for the user. Score 1.0 if explicitly flagged as a custom
+          or partner-specific CR, 0.5 if preserved without flagging,
+          0.0 if dropped or treated as a reference CR.
+        threshold: 0.5
+        metric: custom-source-cr-detection
+        transform: file://assertions/common.py:enrich_output
 
-      # ----- 5. Logging (always passes) -----
+      # Does it flag SetSelector variants? (CNF-23299)
+      - type: llm-rubric
+        value: |
+          The 4.20 reference PG example uses PtpConfigSlave-SetSelector.yaml
+          instead of PtpConfigSlave.yaml. The partner uses the non-SetSelector
+          variant. The agent should notice the -SetSelector variant is
+          available and either switch to it or flag it for the user.
+          Score 1.0 if SetSelector flagged or switched, 0.5 if mentioned
+          without action, 0.0 if not mentioned.
+        threshold: 0.5
+        metric: setselector-enforcement
+        transform: file://assertions/common.py:enrich_output
+
+      # Does it flag new OAuth fields available in 4.20 reference? (B3)
+      - type: llm-rubric
+        value: |
+          The 4.20 reference OAuthLDAP added new fields (insecure, ca,
+          bindPassword, attributes, mappingMethod) that the partner's
+          patch does not include. The agent should mention or flag these
+          new fields as available — NOT necessarily add them to the
+          output, but inform the partner they exist in the new reference.
+          Score 1.0 if new OAuth fields mentioned/flagged, 0.5 if OAuth
+          changes mentioned generally, 0.0 if not mentioned.
+        threshold: 0.5
+        metric: oauth-new-fields-flagged
+        transform: file://assertions/common.py:enrich_output
+
+      # Does it flag version-bearing fields beyond PG metadata? (A1/A3)
+      - type: llm-rubric
+        value: |
+          The partner fixture has version-bearing fields beyond PG metadata:
+          LCA annotations (lca.openshift.io/target-ocp-version: "4.18.13")
+          on StorageLV and AcmeMonitoring, and an AcmeMonitoring data field
+          containing a catalog image tag "1.3.0". The agent should flag or
+          update ALL of these during the semver sweep, not just the PG
+          metadata fields.
+          Score 1.0 if version annotations AND image tag are addressed,
+          0.5 if at least one is addressed, 0.0 if neither is mentioned.
+        threshold: 0.5
+        metric: version-bearing-fields-flagged
+        transform: file://assertions/common.py:enrich_output
+
+      # Does it preserve custom-crs/ paths in output? (B1)
+      - type: llm-rubric
+        value: |
+          The partner uses custom-crs/ paths for partner-specific CRs
+          (AcmeMonitoring, AcmePtpConfig).
+          The agent must preserve these custom-crs/ paths in the output
+          PolicyGenerator files — NOT replace them with reference paths.
+          Score 1.0 if all custom-crs/ paths preserved,
+          0.5 if some preserved, 0.0 if paths were replaced.
+        threshold: 0.49
+        metric: custom-path-preservation
+        transform: file://assertions/common.py:enrich_output
+
+      # Does it flag pre-existing issues in partner input? (Section C)
+      - type: llm-rubric
+        value: |
+          The partner's policies contain pre-existing issues not caused by
+          the version upgrade. A thorough agent should flag at least some:
+          1. AcmeMonitoring has data nested under metadata in patches (YAML structural bug)
+          2. AcmeMonitoring references "restic-backup" (deprecated terminology)
+          The agent should mention at least one pre-existing concern.
+          Score 1.0 if both flagged, 0.5 if one flagged, 0.0 if neither.
+        threshold: 0.0
+        metric: pre-existing-issue-flagging
+        transform: file://assertions/common.py:enrich_output
+
+      # Does it flag missing IBU Upgrade stage? (B4)
+      - type: llm-rubric
+        value: |
+          The reference has 3 IBU lifecycle stages (Prep, Upgrade,
+          Finalize) but the partner only has Prep and Finalize. The
+          agent should flag the missing Upgrade stage as a gap.
+          Score 1.0 if missing stage explicitly flagged,
+          0.5 if IBU stages mentioned without flagging the gap,
+          0.0 if not mentioned.
+        threshold: 0.49
+        metric: ibu-stage-completeness
+        transform: file://assertions/common.py:enrich_output
+
+      # ----- 7. Logging (always passes) -----
       # Records AskUserQuestion calls — what was asked, which option
       # was auto-selected. Informational, not a pass/fail gate.
       - type: python
@@ -422,12 +593,12 @@ tests:
   # the partner is missing CRs that the reference requires.
   #
   # Missing required (uncommented in reference PG examples):
-  #   TunedPerformancePatch  → agent should warn with "WARNING"/"required"
-  #   PtpConfigSlave         → agent should warn with "WARNING"/"required"
+  #   TunedPerformancePatch         → agent should warn with "WARNING"/"required"
+  #   PtpConfigSlave(-SetSelector)  → agent should warn with "WARNING"/"required"
   #
-  # Missing optional CRs (commented out in reference PG examples)
-  # like SriovFecClusterConfig and PtpConfigBoundary are expected
-  # absences — not asserted here to avoid noise.
+  # Missing optional (commented out in reference PG examples):
+  #   SriovFecClusterConfig  → agent should note, not warn
+  #   PtpConfigBoundary      → agent should note, not warn
   #
   # This can't be tested with partner-comprehensive/ (which has
   # all CRs), hence the separate minimal fixture.
@@ -444,8 +615,9 @@ tests:
         value: |
           The agent warned about missing required CRs using explicit warning
           language. The partner policy omits TunedPerformancePatch and
-          PtpConfigSlave, which are required (uncommented in reference PG
-          examples). The skill instructs: use "WARNING" and "required" words.
+          PtpConfigSlave (or PtpConfigSlave-SetSelector), which are required
+          (uncommented in reference PG examples). The skill instructs: use
+          "WARNING" and "required" words.
           Score 1.0 if both CRs flagged with warning/required language,
           0.5 if at least one flagged with warning language,
           0.0 if neither flagged or only noted without warning severity.

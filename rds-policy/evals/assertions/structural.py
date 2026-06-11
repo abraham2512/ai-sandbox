@@ -9,48 +9,51 @@ removal) are handled by config-driven checks in merge.py:check_file_content.
 """
 
 from common import (
+    collect_manifests,
     collect_written_files,
+    fmt_check,
     parse_pg_docs,
     version_matches,
 )
 
 
-def _fmt(name, passed, expected, actual):
-    status = "PASS" if passed else "FAIL"
-    return f"{status} {name} | EXPECTED: {expected} | ACTUAL: {actual}"
+def check_yaml_nesting(_output, context):
+    """Verify the agent did not deepen pre-existing nesting errors.
 
-
-def check_parent_kustomization(_output, context):
-    """Agent must write or edit a kustomization.yaml that includes the target version directory."""
-    config = context["config"]
-    target_ver = config["target_version"]
-
+    The partner fixture has AcmeMonitoring patches with data nested under
+    metadata (a pre-existing bug). Per CNF-23302, the skill should preserve
+    the partner's original structure and flag as a pre-existing issue — not
+    fix it. This assertion checks that the agent did not make nesting WORSE
+    (e.g. adding additional keys under metadata that weren't there before).
+    """
     written = collect_written_files(context)
+    pg_docs, _ = parse_pg_docs(written)
+    manifests = collect_manifests(pg_docs)
 
-    kustomization_files = {
-        p: c for p, c in written.items() if "kustomization" in p.lower()
-    }
+    known_preexisting = {"AcmeMonitoring"}
+    new_issues = []
+    for m in manifests:
+        path = m.get("path", "?")
+        for patch in m.get("patches", []):
+            if not isinstance(patch, dict):
+                continue
+            meta = patch.get("metadata")
+            if not isinstance(meta, dict) or "data" not in meta:
+                continue
+            if any(known.lower() in path.lower() for known in known_preexisting):
+                continue
+            new_issues.append(f"data nested under metadata in {path}")
 
-    if not kustomization_files:
+    if new_issues:
         return {
             "pass_": False,
-            "score": 0.0,
-            "reason": f"No kustomization.yaml found in written files. Written: {', '.join(written.keys()) or '(none)'}",
+            "score": 0,
+            "reason": f"New YAML nesting issues (not pre-existing): {'; '.join(new_issues)}",
         }
-
-    for path, content in kustomization_files.items():
-        if version_matches(content, target_ver):
-            return {
-                "pass_": True,
-                "score": 1.0,
-                "reason": f"kustomization.yaml at {path} references target version {target_ver}",
-            }
-
-    paths = ", ".join(kustomization_files.keys())
     return {
-        "pass_": False,
-        "score": 0.0,
-        "reason": f"kustomization.yaml found ({paths}) but does not reference target version {target_ver}",
+        "pass_": True,
+        "score": 1.0,
+        "reason": "No new YAML nesting issues — pre-existing issues preserved as expected",
     }
 
 
@@ -117,7 +120,7 @@ def check_multi_pg_structure(_output, context):
             {
                 "pass_": bool(passed),
                 "score": 1.0 if passed else 0.0,
-                "reason": _fmt(name, passed, expected, actual),
+                "reason": fmt_check(name, passed, expected, actual),
             }
             for name, passed, expected, actual in checks
         ],

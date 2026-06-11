@@ -52,8 +52,11 @@ Ask the user directly for anything missing.
   extraction command for fetching reference CRs from the ZTP container.
 - **MERGE** -- combine reference updates with partner customizations.
   Read `references/cr-matching-heuristics.md`,
-  `references/merge-conflict-resolution.md`, and
-  `references/hub-template-handling.md` before starting.
+  `references/merge-conflict-resolution.md`,
+  `references/hub-template-handling.md`, and every file in
+  `references/cr-guidance/` before starting. The cr-guidance files
+  contain restructuring rules for specific CRs — read all of them
+  so you know which CRs need special handling during the merge.
 - **VALIDATE** -- dry-run merged policies against hub.
   Read `references/validate-phases.md` before starting.
 
@@ -69,19 +72,30 @@ to merge.
    if no local ref directories are found.
 2. **Diff PolicyGenerator examples** (`acm-*-ranGen.yaml`) between versions.
    These are the high-level view of what changed.
-3. **Diff source-crs content** -- for CRs that changed, compare the actual
-   source CR files (not just paths).
+3. **Diff source-crs content** -- compare EVERY source-cr file that
+   differs between versions, not just the ones with obvious changes.
+   Even a single added field matters -- it may conflict with a partner
+   patch or represent a new default the partner should know about.
 4. **Detect structural changes** -- new/removed files, directory
    reorganization, new subdirectories, symlinks.
 5. **Classify each change**: path-only, content change, GVK replacement,
    new CR, removed CR, deprecated CR.
+   - For CRs with guidance in `references/cr-guidance/`, read that
+     guidance and use it to describe restructuring details — e.g.
+     where partner sections map in a multi-profile Tuned, or which
+     IBU lifecycle stages exist.
+   - When a CR's source file AND its PG entry both changed, describe
+     them together — e.g. ConsoleOperatorDisable: managementState
+     changed to Removed in the source-cr AND complianceType set to
+     mustnothave in the PG means the console is fully removed, not
+     just disabled.
 6. Save results and build a merge checklist with the actual CRs found.
 
 ## After EXPLAIN
 
 Save two files:
 
-Generate a timestamp with `date +%Y%m%d-%H%M%S` and create a new single
+Generate a timestamp with `date +%Y%m%d-%H%M%S` and create a single
 output directory for the entire run: `/tmp/rds-merge-{target}-{timestamp}/`.
 All outputs (reports, checklist, merged policies) go inside this directory.
 
@@ -141,28 +155,15 @@ All outputs (reports, checklist, merged policies) go inside this directory.
 - Policy CRD accepts unknown fields inside `objectDefinition` --
   dry-run only catches Policy wrapper errors, not embedded CR errors.
 
-- MERGE only touches what the partner already has. Do NOT add optional
-  or commented-out reference CRs into the partner's policies. Only add
-  CRs that are new and required in the target version. Optional CRs
-  are only added if the user explicitly requests them (via the "new
-  functionality" input). Process the partner's CRs one by one against
-  the reference changes -- not the other way around.
+- MERGE only touches what the partner already has. Do NOT add CRs,
+  stages, or fields the partner doesn't already have -- warn about
+  gaps instead. Even "required" reference CRs are only reported, not
+  injected. Only add new content if the user explicitly requests it
+  (via the "new functionality" input). Process the partner's CRs one
+  by one against the reference changes -- not the other way around.
 
-- After processing the checklist, do a **full coverage scan**: compare
-  the reference subscription/CR set against the partner's set. For
-  reference CRs the partner does not include, distinguish severity:
-  - **Required CRs** (present in all reference PolicyGenerator examples
-    and not commented out) -- explicitly warn: "WARNING: required CR
-    {name} is not included in your policies." Use the word "required"
-    and "warning" so the severity is clear.
-  - **Optional CRs** (commented out or only in some examples) -- note
-    as "not included" without warning language.
-  In both cases, don't add them -- the partner may have intentionally
-  removed them.
-
-- Check partner patches against current reference values, not just
-  changes. A patch that sets a field to the same value the reference
-  already has is redundant -- flag it so the partner can clean up.
+- Coverage scan and redundant overlay detection are in the Processing
+  and Finish sections -- follow those procedures.
 
 ## MERGE Workflow
 
@@ -193,6 +194,16 @@ review and push.
 5. **Verify symlinks** -- check that every `path:` the partner uses in
    their PolicyGenerator YAML still resolves in the new source-crs/.
    If a path is missing, the merge must update it.
+6. **Identify custom source-CRs** -- compare each `path:` in the
+   partner's PolicyGenerator against the reference PG examples for the
+   source version. If a partner path differs from the reference path for
+   the same CR kind, the partner has a custom source-CR (e.g. a custom
+   `sriovOperatorConfigForSNO.yaml` instead of the reference
+   `SriovOperatorConfig.yaml`). These custom files must be:
+   - Preserved unchanged during merge (do not replace with reference paths)
+   - Copied to the new version's output directory
+   - Flagged for user review (the custom CR may need updates for the
+     target version's API changes)
 
 ### Processing (checklist-driven)
 
@@ -208,40 +219,146 @@ contain ALL manifests from the partner's original -- not just the ones
 that changed. Start by copying the partner's PG content, then apply
 changes in place. Never write a partial PG with only modified manifests.
 
-Walk the merge checklist item by item. The checklist is a **working
+**Communicate structural changes.** When a CR's internal structure
+changed significantly between versions (profiles split, lists
+reorganized, fields renamed), explicitly describe the restructure
+to the user. They need to understand why the output looks different
+from their input. For example, if a Tuned CR went from 1 profile to
+4 architecture-specific profiles, say so -- don't just silently
+restructure the patches.
+
+**Process one checklist item at a time.** The checklist is a **working
 document** -- update statuses in the file as you process each item:
 - `[x]` applied automatically (include what changed)
 - `[!]` needs user decision (include options)
 - `[-]` N/A (partner doesn't use this CR)
 - `[~]` redundant overlay (partner patch matches reference value)
 
-For each item:
+For each item, complete this full cycle before moving to the next:
+1. Read the checklist item
+2. Apply the relevant processing steps (below)
+3. Write the updated checklist status to the file
+4. Validate: check the written YAML for correct nesting and
+   SetSelector usage before moving on
 
-1. **Find affected partner CRs** -- scan partner PolicyGenerator YAML(s)
-   for manifests that reference the same GVK. Use matching heuristics
-   from `references/cr-matching-heuristics.md`.
-   - A partner may use the same source CR in multiple manifests. Apply
-     reference changes to ALL instances. If patches differ between
-     instances, flag each one separately.
-2. **Apply the change** if it doesn't conflict with partner customizations.
-   Only carry forward fields the partner has explicitly patched — do not
-   add new reference fields that the partner never customized. Patches
-   should contain only intentional partner overrides, not reference defaults.
-   Mark as `[x]` in the checklist with a note of what changed.
-3. **Flag for user review** if:
+Do NOT batch multiple items or skip the validation step. Complete
+each item fully before starting the next one. Processing steps:
+
+1. **Find ALL affected partner CRs** -- scan EVERY partner PolicyGenerator
+   file for manifests that reference the same CR path or GVK. Use matching
+   heuristics from `references/cr-matching-heuristics.md`. A single
+   reference CR change may affect multiple manifest entries across
+   different policies. Apply the change to every instance. If patches
+   differ between instances, handle each one separately.
+2. **Apply the change** -- three cases depending on what the partner
+   patches vs what the reference changed:
+   - **Reference field changed between versions** (field existed in
+     BOTH source and target reference): apply the new value. If this
+     overrides a partner-chosen value, it's still a conflict -- use
+     conflict language (e.g. "[x] CONFLICT: partner had priority 19,
+     applied reference default 18"). The user must see every override.
+   - **Partner has custom field, reference now adds it** (field was NOT
+     in the source reference but IS in the target reference): do NOT
+     update the partner's value -- flag it instead. The partner was
+     ahead of the reference; their override may be intentional or stale.
+   - **Reference added new fields partner doesn't patch**: flag as
+     available -- do not inject them.
+   - **Partner patches a field to the same value as the target
+     reference default** (redundant overlay): flag as `[~]` and tell
+     the user the patch is a no-op they can remove. Common example:
+     `installPlanApproval: Automatic` when the source-cr already
+     defaults to `Automatic`.
+3. **GVK replacement** -- when the checklist item is a GVK migration,
+   update three things in the partner's manifest and patches:
+   (a) manifest path to the new source-cr file,
+   (b) field names that changed between old and new API (carry the
+   partner's VALUES to the new field names),
+   (c) apiVersion/kind if the partner patches them directly.
+   Read both old and new source-cr files side by side to identify
+   field renames. See `references/merge-conflict-resolution.md`
+   "GVK Replacement Procedure."
+   **Critical:** when writing output PolicyGenerator files, preserve
+   the EXACT `path:` values the partner used for custom/partner-specific
+   CRs. If the partner used `custom-crs/AcmeSecret.yaml`, the output
+   must use the same path -- never replace with a reference path.
+4. **CR removal** -- when the reference removed a CR and the source-cr
+   file no longer exists in the target version, remove the manifest
+   entry from the partner's output. Policy generation will fail if it
+   references a missing file. If the partner has patches on it, flag
+   as `[!]` first -- the partner may need to provide their own copy.
+5. **Mustnothave conflicts** -- when the reference adds
+   `complianceType: mustnothave` to a manifest the partner has patches
+   on, flag as `[!]`. The partner's patches become ineffective since
+   the resource will be removed. Present options: accept mustnothave
+   and remove patches, or keep the CR without mustnothave.
+6. **Redundant overlay check** (mandatory, do not skip) -- after
+   applying the checklist item's change, check EVERY other patch field
+   on the same manifest against the target source-cr. If a patch field
+   sets the same value the source-cr already has, mark as `[~]`
+   redundant. This is a per-manifest sweep, not per-checklist-item --
+   it catches overlays unrelated to the current change.
+7. **Flag for user review** if:
    - Partner has customized the same field the reference changed (true conflict)
    - Partner has pinned a value the checklist says to bump (e.g. older
      CatalogSource image tag)
    - The change is a GVK replacement and partner has non-trivial patches
    - You're not 100% sure the change is safe
-   Mark as `[!]` in the checklist. After processing all items, ask the
-   user about each `[!]` item before finalizing. Do not silently pick
-   a resolution -- present the options and let the user choose.
-4. If the partner doesn't use the CR at all, mark as `[-]` and move on.
+   Mark as `[!]` in the checklist and use `ask_user_question` immediately
+   to present the conflict with clear options. Do not batch `[!]` items
+   to the end -- ask as each one arises so the user can decide in context.
+8. If the partner doesn't use the CR at all, mark as `[-]` and move on.
+9. **SetSelector variant enforcement** -- PolicyGenerator requires
+   `-SetSelector` variants of CRs when available (e.g.
+   `PerformanceProfile-SetSelector.yaml` instead of
+   `PerformanceProfile.yaml`). Non-SetSelector CRs leave `$mcp` in the
+   nodeSelector which won't resolve. When updating manifest paths or
+   adding CRs, check if a `-SetSelector` variant exists in the target
+   version's `source-crs/`. If the partner was using the non-SetSelector
+   version, switch to the SetSelector variant and flag the change.
 
 **When uncertain: leave it alone and highlight it.** Never silently
 apply a change you're not confident about. It's better to flag 5 things
 that turn out to be fine than to silently break 1 thing.
+
+### Output Validation (Write → Read → Verify → Fix)
+
+After writing each PolicyGenerator file, **read the file back** and
+run these checks against the actual written content — not your memory
+of what you wrote. If any check fails, fix the file with an Edit and
+re-read to confirm the fix.
+
+1. **Content preservation check** -- for every manifest in the partner's
+   INPUT file, verify the OUTPUT file has a corresponding manifest. For
+   every patch field in the input, verify it exists in the output. If
+   a field from the partner's input is missing from the output, you
+   dropped partner content -- add it back immediately. Never silently
+   remove a partner patch field without the user confirming removal.
+2. **YAML nesting** -- `metadata:`, `spec:`, `data:`, `status:` must be
+   siblings at the same indent level under each CR patch — not nested
+   under each other. If you find nesting errors, **do not fix them** —
+   these are pre-existing partner issues. Preserve the partner's original
+   structure and flag as `NOTE: pre-existing issue` in the checklist.
+3. **Redundant overlay sweep** -- for every patched field in every
+   manifest, read the target version's source-cr file and compare. If
+   the patch value matches the source-cr default, flag as `[~]`
+   redundant. This catches overlays the per-item processing missed.
+   **Critical:** a partner field is only redundant if its value is
+   character-for-character identical to the source-cr default. If the
+   values differ at all, it is a partner customization -- preserve it.
+4. **New reference field sweep** -- for every manifest the partner uses,
+   compare the partner's patch fields against the target version's
+   source-cr. If the source-cr added a new field the partner doesn't
+   patch (e.g. `ptpSchedulingPolicy`), flag it as available in the
+   checklist -- do not inject it into the partner's patches.
+5. **Semver sweep on written files** -- read each written PG file and
+   search for any remaining occurrence of the source version (e.g.
+   `4.18`). This catches version-bearing annotations, image tags, and
+   labels that the version bumping step missed. If found, update them
+   and note the change in `checklist.md`.
+
+Preserve the partner's original YAML quoting conventions exactly.
+Different quote styles (`"value"` vs `'value'` vs `value`) can
+produce functionally different strings in some contexts.
 
 ### Version Bumping
 
@@ -252,27 +369,66 @@ After processing all checklist items, walk the version-bumping section:
 - Update Namespace and ManagedClusterSetBinding resources
 - For CatalogSource image tags: update those that track the OCP version.
   If a tag doesn't match the current version (partner pinned it to
-  something else), mark with `⚠ REVIEW` and ask the user.
+  something else), flag as `[~] ⚠ REVIEW` in the checklist and
+  preserve the partner's value.
+
+### Semver Sweep
+
+After version bumping, scan ALL output files — PolicyGenerator YAML,
+kustomization.yaml, and any other written file — for any remaining
+occurrence of the source OCP version (e.g. `4.18`, `4-18`, `4_18`).
+
+**General rule:** every match is suspicious. If the value clearly tracks
+the OCP version (channel, namespace suffix, annotation), update it.
+If you're unsure whether a value tracks the OCP version, flag it in
+the checklist as `[~] ⚠ REVIEW` and preserve the partner's value —
+a false update can break partner-specific pinning.
+
+Common locations this catches:
+- `lca.openshift.io/target-ocp-version` annotations
+- IBU `seedImageRef.version` and `seedImageRef.image`
+- CatalogSource and operator index image tags
+- Filenames referenced in kustomization.yaml generators/resources
+- Hub template namespace references (`{{hub ... hub}}`)
+- Channel values, label selectors, namespace suffixes
+
+### Template ConfigMaps
+
+ConfigMaps used as hub templates (referenced by `{{hub ... hub}}`
+lookups) need the same namespace updates as CRs. If the version
+bumping step changed CR namespaces, update the template ConfigMap
+namespaces to match — lookups will break if the namespace is stale.
+
+Also scan ConfigMap `data:` sections for version-bearing content
+(e.g. catalog index tags, image references). Flag these with
+`⚠ REVIEW` — they may need updating for the target version.
 
 ### Parent Kustomization
 
 After creating the new version directory, update the `kustomization.yaml`
-in the parent directory to add the new version directory.
+in the parent directory to add the new version directory to the
+`generators:` or `resources:` list. Without this entry, kustomize
+won't process the new version's policies.
 
 ### Finish
 
 1. **Coverage scan** (mandatory) -- compare the reference PG examples
-   against the partner's CR set. For each reference CR the partner does
-   not include:
-   - **Required** (uncommented in ref PG examples): print
-     `WARNING: required CR {name} is not included in your policies.`
-   - **Optional** (commented out in ref PG examples): note as
-     `{name}: not included (optional)`
-   Do not add missing CRs -- just report them.
-2. **Show the diff** using `diff -u` between old and new version
-   directories so the user can review all PolicyGenerator changes.
-   Include the parent `kustomization.yaml` diff.
-3. **Present the merge checklist** -- by this point every item in
+   against the partner's CR set:
+   a. Identify which reference CRs are **required** (uncommented in
+      all reference PG examples) vs **optional** (commented out or
+      only in some examples).
+   b. For each required CR the partner does not include, output exactly:
+      `WARNING: required CR {name} is not included in your policies.`
+      You MUST use the words "WARNING" and "required" so the severity
+      is unambiguous. Do not soften to "note" or "optional."
+   c. For each optional CR the partner does not include, note as:
+      `{name}: not included (optional)`
+      Use "optional" and do NOT use "WARNING" or "required."
+   d. Do not add missing CRs -- just report them with correct severity.
+   e. Output each line individually in your response to the user --
+      do not summarize as a count (e.g. "6 missing CRs"). The user
+      must see every CR name and its severity.
+2. **Present the merge checklist** -- by this point every item in
    `checklist.md` in the output directory must have
    a status. This is mandatory, not a free-form summary. Every CR the
    partner uses must appear with status:
@@ -283,8 +439,17 @@ in the parent directory to add the new version directory.
    Include CRs the partner removed (present in reference but absent
    from partner policies) so nothing is silently skipped. No item
    may be left unchecked.
-4. The user pushes when ready -- never push on their behalf without
+3. The user pushes when ready -- never push on their behalf without
    explicit permission.
+4. **Pre-existing issue scan** -- scan the partner's input policies for
+   issues that are NOT caused by the version upgrade but that a
+   reviewer should know about:
+   - YAML structural issues (data nested under metadata, missing fields)
+   - Deprecated field names or API patterns
+   - Known deprecations in referenced tools (e.g. restic → nodeAgent)
+   - Invalid YAML values that would fail at apply time
+   Report as `NOTE: pre-existing issue in {file}: {description}`.
+   Do not fix silently -- flag so the user is aware.
 
 ### Artifact Checklist
 
