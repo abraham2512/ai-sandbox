@@ -33,6 +33,17 @@ Do NOT explore the project, search the filesystem, or read local files
 to find policies. The user's policies are external to this project.
 Ask the user directly for anything missing.
 
+**ONLY modify the copied files under /tmp** All MERGE output
+(PolicyGenerator YAML, source-crs, kustomization changes) MUST be
+written to the output directory (`/tmp/rds-merge-{target}-{timestamp}/`).
+Read from the user's source paths, write ONLY to the output directory.
+This is a hard rule — even if the user provides a local directory path,
+treat it as read-only input. The user reviews the output directory and
+applies changes themselves when ready. Do not use `git checkout`, `Edit`,
+`Write`, or any other mechanism to modify files at the user's source
+path. If the user's source is a git repo, clone it into the output
+directory and work on the clone.
+
 ## Inputs
 
 **Always required:**
@@ -167,20 +178,24 @@ All outputs (reports, checklist, merged policies) go inside this directory.
 
 ## MERGE Workflow
 
-MERGE writes changes into a **clone of the partner's repo**, not to a
-separate temp directory. This gives the user a proper git diff they can
-review and push.
+**MERGE NEVER modifies the user's original files.** All output goes to
+the output directory (`/tmp/rds-merge-{target}-{timestamp}/`). The
+user's source paths are READ-ONLY inputs. This applies regardless of
+whether the source is a git repo URL or a local directory path.
 
 ### Setup
 
 1. **Load the merge checklist** from the output directory
    (`/tmp/rds-merge-{target}-{timestamp}/checklist.md`).
    This is the driver -- every change comes from this list.
-2. **Clone** the partner's policy repo (URL or local path) into the
-   same output directory (`/tmp/rds-merge-{target}-{timestamp}/`).
-   - For internal GitLab with self-signed certs, use
+2. **Clone or copy** the partner's policy source into the output
+   directory (`/tmp/rds-merge-{target}-{timestamp}/partner/`).
+   - If a git repo URL: clone into the output directory.
+     For internal GitLab with self-signed certs, use
      `GIT_SSL_NO_VERIFY=1` on the clone.
-   - Ask the user for permission before cloning.
+   - If a local directory path: `cp -a` the directory into the output
+     directory. Do NOT modify the original.
+   - Ask the user for permission before cloning/copying.
 3. **Create** a new version directory alongside the existing one
    (e.g. `version_4.20/` next to `version_4.18.5/`).
    - Copy the partner's current version directory as the starting point.
