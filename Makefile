@@ -10,7 +10,7 @@ test-ci: install-uv lint
 lint:
 	uv run ruff check .
 	uv run ruff format --check .
-	find . -name '*.sh' -not -path '*/.venv/*' -not -path '*/.claude/worktrees/*' -not -path '*/node_modules/*' | xargs shellcheck
+	find . -name '*.sh' -not -path '*/.venv/*' -not -path '*/.claude/worktrees/*' -not -path '*/node_modules/*' -print0 | xargs -0 -r shellcheck
 
 setup:
 	uv run pre-commit install

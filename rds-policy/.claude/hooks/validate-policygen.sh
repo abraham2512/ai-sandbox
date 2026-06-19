@@ -19,15 +19,15 @@ case "$FILE_PATH" in
   *) exit 0 ;;
 esac
 
-# Check if this file is a PolicyGenerator
-if ! grep -q 'kind: PolicyGenerator' "$FILE_PATH" 2>/dev/null; then
+# Check if this file is a PolicyGenerator (exclude comments)
+if ! grep -qE '^[[:space:]]*kind:[[:space:]]+PolicyGenerator' "$FILE_PATH" 2>/dev/null; then
   exit 0
 fi
 
 DIR=$(dirname "$FILE_PATH")
 
-# Need kustomization.yaml in the same directory
-if [ ! -f "$DIR/kustomization.yaml" ]; then
+# Need a kustomization file in the same directory
+if [ ! -f "$DIR/kustomization.yaml" ] && [ ! -f "$DIR/kustomization.yml" ] && [ ! -f "$DIR/Kustomization" ]; then
   exit 0
 fi
 

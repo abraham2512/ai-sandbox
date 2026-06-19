@@ -56,23 +56,35 @@ No human intervention needed. The hook taught the LLM to produce valid output.
 `kustomize build` + the PolicyGenerator plugin binary perform these checks
 implicitly:
 
-| Check | Caught? | Example error |
-|-------|---------|---------------|
-| Missing source-cr path | Yes | `could not read the manifest path source-crs/DoesNotExist.yaml` |
-| Malformed YAML syntax | Yes | `MalformedYAMLError: yaml: line 21: did not find expected '-' indicator` |
-| Duplicate YAML keys | Yes | `mapping key "namespace" already defined at line 6` |
-| Unknown PG fields | Yes | `field bogusField found but not defined in type PolicyGenerator` |
-| Invalid field combos | Yes | `field consolidateManifests found but not defined` (wrong level) |
-| Stale kustomization.yaml refs | Yes | `could not read the manifest path` (old filename) |
-| Invalid complianceType value | **No** | Passes silently — `bogus` accepted |
-| Invalid remediationAction | **No** | Passes silently — `bogus` accepted |
-| Bad fields inside source-cr patches | **No** | `totallyFakeField: true` passes — PG doesn't validate embedded CRs |
-| Wrong apiVersion in source-crs | **No** | `ptp.openshift.io/v999` passes — PG passes through any content |
+**kustomize** catches:
 
-**Bottom line:** the hook catches structural and YAML issues reliably. It does
-not validate the content of embedded CRs or enum field values — those require
-either `kubeconform` with CRD schemas or `oc apply --dry-run=server` against
-a real cluster.
+| Check | Example error |
+|-------|---------------|
+| Malformed YAML syntax | `MalformedYAMLError: yaml: line 21: did not find expected '-' indicator` |
+| Stale kustomization.yaml refs | `could not read the manifest path` (old filename) |
+
+**PolicyGenerator plugin** catches:
+
+| Check | Example error |
+|-------|---------------|
+| Missing source-cr path | `could not read the manifest path source-crs/DoesNotExist.yaml` |
+| Unknown PG fields | `field bogusField found but not defined in type PolicyGenerator` |
+| Invalid field combos | `field consolidateManifests found but not defined` (wrong level) |
+
+**Neither catches:**
+
+| Check | What happens |
+|-------|--------------|
+| Duplicate YAML keys | Silently takes last value |
+| Invalid complianceType value | Passes silently |
+| Invalid remediationAction | Passes silently |
+| Bad fields inside source-cr patches | PG passes through any content |
+| Wrong apiVersion in source-crs | PG passes through any content |
+
+**Bottom line:** the hook catches YAML syntax errors (kustomize) and
+PolicyGenerator structural errors (plugin). It does not validate
+embedded CR content or enum field values — those require
+`oc apply --dry-run=server` against a real cluster.
 
 ## Prerequisites
 
