@@ -1,11 +1,14 @@
-.PHONY: init test-ci lint setup setup-rh-pre-commit install-uv
+.PHONY: init test-ci lint setup setup-rh-pre-commit install-uv install-shellcheck
 
 install-uv:
 	@command -v uv >/dev/null 2>&1 || { echo "Installing uv..."; curl -LsSf https://astral.sh/uv/install.sh | sh; }
 
+install-shellcheck:
+	@command -v shellcheck >/dev/null 2>&1 || { echo "Installing shellcheck..."; dnf install -y ShellCheck 2>/dev/null || brew install shellcheck; }
+
 init: install-uv setup-rh-pre-commit
 
-test-ci: install-uv lint
+test-ci: install-uv install-shellcheck lint
 
 lint:
 	uv run ruff check .
