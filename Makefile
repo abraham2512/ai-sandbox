@@ -4,7 +4,10 @@ install-uv:
 	@command -v uv >/dev/null 2>&1 || { echo "Installing uv..."; curl -LsSf https://astral.sh/uv/install.sh | sh; }
 
 install-shellcheck:
-	@command -v shellcheck >/dev/null 2>&1 || { echo "Installing shellcheck..."; dnf install -y ShellCheck 2>/dev/null || brew install shellcheck; }
+	@command -v shellcheck >/dev/null 2>&1 || { \
+		echo "Installing shellcheck..."; \
+		curl -sSL https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz | tar xJ --strip-components=1 -C /usr/local/bin shellcheck-stable/shellcheck; \
+	}
 
 init: install-uv setup-rh-pre-commit
 
