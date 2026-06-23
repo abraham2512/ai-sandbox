@@ -1,12 +1,15 @@
 .PHONY: init test-ci lint setup setup-rh-pre-commit install-uv install-shellcheck
 
+export PATH := $(HOME)/.local/bin:$(PATH)
+
 install-uv:
 	@command -v uv >/dev/null 2>&1 || { echo "Installing uv..."; curl -LsSf https://astral.sh/uv/install.sh | sh; }
 
 install-shellcheck:
 	@command -v shellcheck >/dev/null 2>&1 || { \
 		echo "Installing shellcheck..."; \
-		curl -sSL https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz | tar xJ --strip-components=1 -C /usr/local/bin shellcheck-stable/shellcheck; \
+		mkdir -p $(HOME)/.local/bin && \
+		curl -sSL https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz | tar xJ --strip-components=1 -C $(HOME)/.local/bin shellcheck-stable/shellcheck; \
 	}
 
 init: install-uv setup-rh-pre-commit
