@@ -185,6 +185,13 @@ whether the source is a git repo URL or a local directory path.
 
 ### Setup
 
+0. **Check validation tools** -- run `command -v kustomize` and check
+   for the PolicyGenerator plugin binary at
+   `~/.config/kustomize/plugin/policy.open-cluster-management.io/v1/policygenerator/PolicyGenerator`.
+   If either is missing, tell the user:
+   "Validation hook won't run — install kustomize and the PolicyGenerator
+   plugin for automatic error catching during merge. See docs/HOOKS.md."
+   This is informational, not a blocker — continue with the merge.
 1. **Load the merge checklist** from the output directory
    (`/tmp/rds-merge-{target}-{timestamp}/checklist.md`).
    This is the driver -- every change comes from this list.
@@ -336,6 +343,9 @@ apply a change you're not confident about. It's better to flag 5 things
 that turn out to be fine than to silently break 1 thing.
 
 ### Output Validation (Write → Read → Verify → Fix)
+
+**Automatic validation:** a hook runs `kustomize build` after every
+Write/Edit of a PolicyGenerator YAML — errors feed back automatically.
 
 After writing each PolicyGenerator file, **read the file back** and
 run these checks against the actual written content — not your memory
