@@ -33,14 +33,12 @@ if [ ! -f "$DIR/kustomization.yaml" ] && [ ! -f "$DIR/kustomization.yml" ] && [ 
 fi
 
 if ! command -v kustomize &>/dev/null; then
-  echo "kustomize not found — skipping PolicyGenerator validation"
   exit 0
 fi
 
 PG_PLUGIN_PATH="policy.open-cluster-management.io/v1/policygenerator/PolicyGenerator"
 PG_PLUGIN="${XDG_CONFIG_HOME:-${HOME}/.config}/kustomize/plugin/${PG_PLUGIN_PATH}"
 if [ ! -x "$PG_PLUGIN" ]; then
-  echo "PolicyGenerator plugin not found at ${PG_PLUGIN} — skipping validation"
   exit 0
 fi
 
