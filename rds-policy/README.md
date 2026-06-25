@@ -4,21 +4,26 @@ AI-driven policy generation for OpenShift RDS version updates. Helps telco
 partners update Day 2 configuration policies when moving between OCP versions
 (e.g. 4.18 to 4.20).
 
-See [docs/DESIGN.md](docs/DESIGN.md) for the full design document.
-
 ## Quick Start
 
-Install as a plugin from any repo — no cloning required:
+Install as a plugin (skill + validation hook):
 
 ```sh
 /plugin marketplace add openshift-kni/ai-sandbox
-/plugin install rds-policy@openshift-kni-ai-sandbox --project
+/plugin install rds-policy@openshift-kni-ai-sandbox --project  # team-shared
+/plugin install rds-policy@openshift-kni-ai-sandbox --local    # personal only
 ```
 
-This gives you the skill and the validation hook. Then prompt:
+Then prompt:
 
 ```
 upgrade my policies from 4.18 to 4.20
+```
+
+For local development, run from `rds-policy/` or use `--plugin-dir`:
+
+```sh
+claude --plugin-dir /path/to/ai-sandbox/rds-policy
 ```
 
 ### Prerequisites (optional, for validation hook)
@@ -27,41 +32,8 @@ upgrade my policies from 4.18 to 4.20
 - [PolicyGenerator plugin](https://github.com/open-cluster-management-io/policy-generator-plugin)
   binary at `~/.config/kustomize/plugin/policy.open-cluster-management.io/v1/policygenerator/PolicyGenerator`
 
-Without these, the skill works normally but the automatic validation
-hook is a no-op. See [docs/HOOKS.md](docs/HOOKS.md) for details.
-
-## Installation Options
-
-The agent's domain knowledge is packaged as an
-[Agent Skill](https://agentskills.io) at `skills/rds-policy-update/`.
-
-### Plugin install (recommended)
-
-Install from the marketplace into your project:
-
-```sh
-/plugin marketplace add openshift-kni/ai-sandbox
-/plugin install rds-policy@openshift-kni-ai-sandbox --project  # team-shared
-/plugin install rds-policy@openshift-kni-ai-sandbox --local    # personal only
-```
-
-Includes both the skill and the validation hook.
-
-### Local development
-
-Run Claude Code from `rds-policy/` for skill development:
-
-```sh
-cd rds-policy
-claude
-```
-
-Or point to the plugin directory from any repo:
-
-```sh
-claude --plugin-dir /path/to/ai-sandbox/rds-policy
-```
-
+Without these, the skill works normally but the validation hook is a
+no-op.
 
 ## Docs
 
