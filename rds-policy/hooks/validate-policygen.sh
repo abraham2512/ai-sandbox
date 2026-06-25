@@ -22,6 +22,7 @@ esac
 
 # Check if this file is a PolicyGenerator (exclude comments)
 if ! grep -qE '^[[:space:]]*kind:[[:space:]]+PolicyGenerator' "$FILE_PATH" 2>/dev/null; then
+  echo "${FILE_PATH} is not a PolicyGenerator file"
   exit 0
 fi
 
@@ -29,6 +30,7 @@ DIR=$(dirname "$FILE_PATH")
 
 # Need a kustomization file in the same directory
 if [ ! -f "$DIR/kustomization.yaml" ] && [ ! -f "$DIR/kustomization.yml" ] && [ ! -f "$DIR/Kustomization" ]; then
+  echo "kustomization file not found in ${DIR}"
   exit 0
 fi
 
