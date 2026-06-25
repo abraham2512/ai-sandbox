@@ -1,0 +1,1 @@
+../.claude/hooks/validate-policygen.sh
