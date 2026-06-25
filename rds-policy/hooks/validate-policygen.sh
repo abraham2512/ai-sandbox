@@ -5,6 +5,7 @@ set -euo pipefail
 # Input: JSON via stdin with tool_name, tool_input, tool_result
 # Output: exit 0 = success (stdout in transcript), exit 2 = error (stderr fed back to Claude)
 
+# Expected: {"tool_name":"Write","tool_input":{"file_path":"/path/to/file.yaml","content":"..."},"tool_result":{...}}
 INPUT=$(cat)
 
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
@@ -32,11 +33,14 @@ if [ ! -f "$DIR/kustomization.yaml" ] && [ ! -f "$DIR/kustomization.yml" ] && [ 
 fi
 
 if ! command -v kustomize &>/dev/null; then
+  echo "kustomize not found — skipping PolicyGenerator validation"
   exit 0
 fi
 
-PG_PLUGIN="${HOME}/.config/kustomize/plugin/policy.open-cluster-management.io/v1/policygenerator/PolicyGenerator"
+PG_PLUGIN_PATH="policy.open-cluster-management.io/v1/policygenerator/PolicyGenerator"
+PG_PLUGIN="${XDG_CONFIG_HOME:-${HOME}/.config}/kustomize/plugin/${PG_PLUGIN_PATH}"
 if [ ! -x "$PG_PLUGIN" ]; then
+  echo "PolicyGenerator plugin not found at ${PG_PLUGIN} — skipping validation"
   exit 0
 fi
 
