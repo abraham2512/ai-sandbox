@@ -19,12 +19,13 @@ Skill writes PolicyGenerator YAML
   → hook fires (PostToolUse on Write/Edit of *.yaml)
   → checks for `kind: PolicyGenerator` in the file
   → runs `kustomize build --enable-alpha-plugins` on the directory
-  → exit 0 + "VALIDATE OK"  (success, shown in transcript)
+  → exit 0  (silent — success produces no output)
   → exit 2 + error on stderr (fed back to LLM for self-correction)
 ```
 
 The hook only fires on `.yaml` files containing `kind: PolicyGenerator`. All
-other files are a silent no-op.
+other files are a silent no-op. Early-exit guards (missing tools, non-PG files)
+are also silent.
 
 ## Example: feedback loop in action
 
@@ -42,14 +43,8 @@ The hook catches that `ClusterMonitoringConfig.yaml` no longer exists in the
 
 The LLM reads the error and adapts — instead of continuing with incremental
 edits (each of which would fail), it writes the complete merged file in one
-pass with all path changes applied:
-
-```
-⏺ Write(acme-sno-4.20.yaml)                   # skill writes complete file
-  ⎿  VALIDATE OK — PolicyGenerator build passed
-```
-
-No human intervention needed. The hook taught the LLM to produce valid output.
+pass with all path changes applied. The successful write is silent (no hook
+output), and the LLM continues with the next step.
 
 ## What the validation catches (and doesn't)
 
@@ -92,7 +87,7 @@ embedded CR content or enum field values — those require
 - PolicyGenerator plugin binary at:
   `~/.config/kustomize/plugin/policy.open-cluster-management.io/v1/policygenerator/PolicyGenerator`
 
-The hook degrades to a no-op if either tool is missing.
+The hook silently degrades to a no-op if either tool is missing.
 
 ## Files
 
