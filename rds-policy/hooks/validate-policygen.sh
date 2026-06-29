@@ -49,5 +49,4 @@ BUILD_OUTPUT=$(kustomize build --enable-alpha-plugins "$DIR" 2>&1) || {
   exit 2
 }
 
-echo "VALIDATE OK — PolicyGenerator build passed"
 exit 0
