@@ -7,6 +7,9 @@ metadata:
     Root catalog entry point for the telco agentic plugins in ai-sandbox.
     Register this file's URL in Compass; it points to the system and to
     every plugin location below it.
+  annotations:
+    agentic.redhat.com/markets: "ecosystem"
+    agentic.redhat.com/source: "redhat"
 spec:
   targets:
     - ./system.yaml

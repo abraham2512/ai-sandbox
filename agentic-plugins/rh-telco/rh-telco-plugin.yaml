@@ -37,10 +37,12 @@ metadata:
       title: Source Repository
       icon: github
 spec:
-  # QUESTION: We left out AGENTS.md because the plugin has a
-  # single skill, and the skill's description already decides when it
-  # triggers. Is one needed now for the catalog or for Lola
-  # (--append-context), or can we add it once we have a second skill?
+  # QUESTION: We left out AGENTS.md because the plugin has a single skill,
+  # and the skill's description already decides when it triggers. The
+  # publishing pipeline seems to build each agent's instruction file
+  # (CLAUDE.md, GEMINI.md and so on) from AGENTS.md, so without one we'd ship
+  # no instructions. Is that fine for now, or should we add one before
+  # publishing?
   type: plugin
   lifecycle: beta
   # QUESTION: Should we create our own owner group, or stay
