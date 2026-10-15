@@ -19,8 +19,12 @@ providers:
       working_dir: '{{ env.RDS_FIXTURES_DIR | default("./fixtures", true) }}'
       setting_sources: ['project']
       skills: ['rds-policy-update']
+      # promptfoo builds the session's toolset from this list, so any tool
+      # not listed here is unavailable to the agent, not just unapproved.
       append_allowed_tools:
         - Read
+        - Write
+        - Edit
         - Bash
         - Grep
         - Glob
