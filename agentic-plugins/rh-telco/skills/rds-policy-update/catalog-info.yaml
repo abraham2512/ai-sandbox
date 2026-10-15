@@ -2,7 +2,7 @@ apiVersion: backstage.io/v1alpha1
 kind: AiResource
 metadata:
   name: rds-policy-update
-  namespace: ai5-marketplace
+  namespace: telco
   title: RDS Policy Update
   description: >
     Updates OpenShift RDS Day 2 configuration policies for a version upgrade
@@ -27,7 +27,7 @@ metadata:
 spec:
   type: skill
   lifecycle: beta
-  owner: group:redhat/ai5-marketplace
+  owner: group:redhat/telco-ai-team
   disciplines:
     - telco
     - devops
@@ -36,4 +36,4 @@ spec:
     - upgrades
   agents: []
   dependsOn:
-    - airesource:ai5-marketplace/rh-telco
+    - airesource:telco/rh-telco

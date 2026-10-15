@@ -14,6 +14,6 @@ metadata:
     agentic.redhat.com/repository: https://github.com/openshift-kni/ai-sandbox
     github.com/project-slug: openshift-kni/ai-sandbox
 spec:
-  owner: group:redhat/ai5-marketplace
+  owner: group:redhat/telco-ai-team
   dependencyOf:
-    - airesource:ai5-marketplace/rh-telco
+    - airesource:telco/rh-telco
