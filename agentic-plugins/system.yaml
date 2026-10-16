@@ -16,4 +16,4 @@ metadata:
 spec:
   owner: group:redhat/telco-ai-team
   dependencyOf:
-    - airesource:telco/rh-telco
+    - airesource:rh-telco/rh-telco

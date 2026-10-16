@@ -2,7 +2,7 @@ apiVersion: backstage.io/v1alpha1
 kind: AiResource
 metadata:
   name: rds-policy-update
-  namespace: telco
+  namespace: rh-telco
   title: RDS Policy Update
   description: >
     Updates OpenShift RDS Day 2 configuration policies for a version upgrade
@@ -36,4 +36,4 @@ spec:
     - upgrades
   agents: []
   dependsOn:
-    - airesource:telco/rh-telco
+    - airesource:rh-telco/rh-telco

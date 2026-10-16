@@ -2,7 +2,7 @@ apiVersion: backstage.io/v1alpha1
 kind: AiResource
 metadata:
   name: rh-telco
-  namespace: telco
+  namespace: rh-telco
   title: Red Hat Telco
   description: >
     Skills for telco partners running OpenShift RAN and Core reference
@@ -17,7 +17,7 @@ metadata:
   annotations:
     backstage.io/source-location: >-
       url:https://github.com/openshift-kni/ai-sandbox/tree/main/agentic-plugins/rh-telco/
-    agentic-plugins.redhat.com/version: "1.0"
+    agentic-plugins.redhat.com/version: "0.0.1"
     agentic.redhat.com/lola-module: "true"
     agentic.redhat.com/lola-module-name: rh-telco
     agentic.redhat.com/repository: https://github.com/openshift-kni/ai-sandbox
@@ -42,4 +42,4 @@ spec:
   dependsOn:
     - system:default/telco-agentic-plugins
   dependencyOf:
-    - airesource:telco/rds-policy-update
+    - airesource:rh-telco/rds-policy-update
