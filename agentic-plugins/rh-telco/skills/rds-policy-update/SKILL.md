@@ -15,7 +15,7 @@ description: >
 license: Apache-2.0
 model: inherit
 color: magenta
-allowed-tools: Read Write Edit Grep Glob AskUserQuestion Bash(podman:*) Bash(oc:*) Bash(git:*) Bash(kustomize:*) Bash(diff:*) Bash(cp:*) Bash(mkdir:*) Bash(date:*) Bash(tar:*) Bash(base64:*)
+allowed-tools: Read Write Edit Grep Glob AskUserQuestion Bash(podman:*) Bash(oc:*) Bash(kustomize:*) Bash(diff:*) Bash(cp:*) Bash(mkdir:*) Bash(date:*) Bash(tar:*) Bash(base64:*)
 metadata:
   version: "0.0.1"
   notice: >
