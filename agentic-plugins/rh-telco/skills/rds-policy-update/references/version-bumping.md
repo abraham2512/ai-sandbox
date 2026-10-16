@@ -1,4 +1,4 @@
-# Version Bumping and Sweeps
+# Version Bumping
 
 ## Version Bumping
 
@@ -11,26 +11,6 @@ After processing all checklist items, walk the version-bumping section:
   If a tag doesn't match the current version (partner pinned it to
   something else), flag as `[~] ⚠ REVIEW` in the checklist and
   preserve the partner's value.
-
-## Semver Sweep
-
-After version bumping, scan ALL output files — PolicyGenerator YAML,
-kustomization.yaml, and any other written file — for any remaining
-occurrence of the source OCP version (e.g. `4.18`, `4-18`, `4_18`).
-
-**General rule:** every match is suspicious. If the value clearly tracks
-the OCP version (channel, namespace suffix, annotation), update it.
-If you're unsure whether a value tracks the OCP version, flag it in
-the checklist as `[~] ⚠ REVIEW` and preserve the partner's value —
-a false update can break partner-specific pinning.
-
-Common locations this catches:
-- `lca.openshift.io/target-ocp-version` annotations
-- IBU `seedImageRef.version` and `seedImageRef.image`
-- CatalogSource and operator index image tags
-- Filenames referenced in kustomization.yaml generators/resources
-- Hub template namespace references (`{{hub ... hub}}`)
-- Channel values, label selectors, namespace suffixes
 
 ## Template ConfigMaps
 

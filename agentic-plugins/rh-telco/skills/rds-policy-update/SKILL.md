@@ -58,7 +58,8 @@ catalog) live in the reference guides indexed below.
 - `validate-phases.md` -- dry-run validation
 - `merge-setup.md` -- MERGE setup steps; read at the start of MERGE
 - `output-validation.md` -- checks to run after writing each PolicyGenerator
-- `version-bumping.md` -- version bumping and sweeps at the end of MERGE
+- `version-bumping.md` -- version bumping, template ConfigMaps and parent
+  kustomization at the end of MERGE
 
 ## When to Use This Skill
 
@@ -384,12 +385,31 @@ file as written: content preservation, YAML nesting, redundant overlay
 sweep, new reference field sweep, and semver sweep. Fix and re-read until
 all checks pass.
 
-### Version Bumping and Sweeps
+### Version Bumping
 
 After processing all checklist items, read `references/version-bumping.md`
-and complete all four steps in it: version bumping, the semver sweep across
-all output files, template ConfigMap updates, and the parent kustomization
-entry.
+and complete all three steps in it: version bumping, template ConfigMap
+updates, and the parent kustomization entry. Then run the semver sweep below.
+
+### Semver Sweep
+
+After version bumping, scan ALL output files — PolicyGenerator YAML,
+kustomization.yaml, and any other written file — for any remaining
+occurrence of the source OCP version (e.g. `4.18`, `4-18`, `4_18`).
+
+**General rule:** every match is suspicious. If the value clearly tracks
+the OCP version (channel, namespace suffix, annotation), update it.
+If you're unsure whether a value tracks the OCP version, flag it in
+the checklist as `[~] ⚠ REVIEW` and preserve the partner's value —
+a false update can break partner-specific pinning.
+
+Common locations this catches:
+- `lca.openshift.io/target-ocp-version` annotations
+- IBU `seedImageRef.version` and `seedImageRef.image`
+- CatalogSource and operator index image tags
+- Filenames referenced in kustomization.yaml generators/resources
+- Hub template namespace references (`{{hub ... hub}}`)
+- Channel values, label selectors, namespace suffixes
 
 ### Finish
 
