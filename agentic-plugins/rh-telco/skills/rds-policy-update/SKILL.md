@@ -61,6 +61,14 @@ catalog) live in the reference guides indexed below.
 - `version-bumping.md` -- version bumping, template ConfigMaps and parent
   kustomization at the end of MERGE
 
+## Prerequisites
+
+- `podman` (or `oc`) and a `registry.redhat.io` login, for the RDS containers
+- `git`, or a local copy of the partner's policies
+- Optional: `kustomize` and the PolicyGenerator plugin, for validation
+
+Never display registry or Git credentials.
+
 ## When to Use This Skill
 
 Use when:
@@ -480,7 +488,12 @@ None.
 ### Reference Documentation
 The reference guides listed under What's In This Skill.
 
-### Required CLI Tools
-- `podman` (or `oc`) to extract reference CRs from the RDS containers
-- `git` to clone partner policy repos
-- `kustomize` and the PolicyGenerator plugin, optional, for validation
+## Example Usage
+
+User: "upgrade my policies from 4.18 to 4.20, the policy source is ./acme-ran"
+
+1. EXPLAIN: extract both RAN references, diff them, and save `explain.md`
+   and `checklist.md` in `/tmp/rds-merge-4.20-<timestamp>/`.
+2. MERGE: ask before copying `./acme-ran`, apply each checklist item to the
+   copy, and ask about each conflict as it comes up.
+3. Finish: report each missing required CR as a WARNING, then present the checklist.

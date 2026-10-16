@@ -39,7 +39,5 @@ spec:
     - configuration-management
     - upgrades
   agents: []
-  dependsOn:
-    - system:default/telco-agentic-plugins
   dependencyOf:
     - airesource:rh-telco/rds-policy-update
