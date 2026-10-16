@@ -13,7 +13,11 @@ description: >
   for standalone EXPLAIN or VALIDATE. Do NOT use for cluster upgrades,
   fresh installs, or fleet rollout.
 license: Apache-2.0
+model: inherit
+color: magenta
+allowed-tools: Read Write Edit Grep Glob AskUserQuestion Bash(podman:*) Bash(oc:*) Bash(kustomize:*) Bash(diff:*) Bash(cp:*) Bash(mkdir:*) Bash(date:*) Bash(tar:*) Bash(base64:*)
 metadata:
+  version: "0.0.1"
   notice: >
     Content provided to this skill, including policy files and
     configuration data, may be sent to the LLM configured in your
@@ -21,7 +25,7 @@ metadata:
     and security before use.
 ---
 
-# RDS Policy Update
+# /rds-policy-update Skill
 
 You help telco partners update Day 2 configuration policies between OCP
 versions. You work at the **PolicyGenerator** level -- that's input and output.
@@ -52,6 +56,31 @@ catalog) live in the reference guides indexed below.
 - `hub-template-handling.md` -- `{{hub ... hub}}` templates
 - `merge-conflict-resolution.md` -- how to handle overlaps
 - `validate-phases.md` -- dry-run validation
+- `merge-setup.md` -- MERGE setup steps; read at the start of MERGE
+- `output-validation.md` -- checks to run after writing each PolicyGenerator
+- `version-bumping.md` -- version bumping, template ConfigMaps and parent
+  kustomization at the end of MERGE
+
+## Prerequisites
+
+- `podman` (or `oc`) and a `registry.redhat.io` login, for the RDS containers
+- `git`, or a local copy of the partner's policies
+- Optional: `kustomize` and the PolicyGenerator plugin, for validation
+
+Never display registry or Git credentials.
+
+## When to Use This Skill
+
+Use when:
+- The user wants Day 2 policies updated for an OCP upgrade (e.g. 4.18 to
+  4.20), for RAN or Core
+- The user asks what changed between two RDS reference versions
+- The user wants reference changes merged into their PolicyGenerator files,
+  or merged policies validated
+
+Do NOT use when:
+- The user wants to upgrade a cluster, do a fresh install, or roll out to a
+  fleet. This skill only works on policy files.
 
 ## Important
 
@@ -92,7 +121,7 @@ VALIDATE), always end with this notice on its own line:
   PolicyGenerator YAML lives
 - **New functionality** (optional) -- e.g. "add logging health check"
 
-## Capabilities
+## Workflow
 
 - **EXPLAIN** -- diff two reference versions, classify changes per-CR.
   Only needs the two versions and the use case -- no partner policies required.
@@ -231,73 +260,11 @@ whether the source is a git repo URL or a local directory path.
 
 ### Setup
 
-0. **Check validation tools** -- run `command -v kustomize` and check
-   for the PolicyGenerator plugin binary at
-   `~/.config/kustomize/plugin/policy.open-cluster-management.io/v1/policygenerator/PolicyGenerator`.
-   If either is missing, tell the user:
-   "Validation hook won't run — install kustomize and the PolicyGenerator
-   plugin for automatic error catching during merge. See docs/HOOKS.md."
-   This is informational, not a blocker — continue with the merge.
-1. **Load the merge checklist** from the output directory
-   (`/tmp/rds-merge-{target}-{timestamp}/checklist.md`).
-   This is the driver -- every change comes from this list.
-2. **Clone or copy** the partner's policy source into the output
-   directory (`/tmp/rds-merge-{target}-{timestamp}/partner/`).
-   - If a git repo URL: clone into the output directory.
-   - If a local directory path: `cp -a` the directory into the output
-     directory. Do NOT modify the original.
-   - Ask the user for permission before cloning/copying.
-3. **Prepare the target version workspace** -- follow the partner's
-   existing convention (version directories or version branches). Copy
-   the partner's current version content as the starting point. Also
-   follow the partner's PolicyGenerator file naming convention -- if
-   they use e.g. `core-baseline-production.yaml`, keep that pattern
-   rather than renaming to the reference names.
-4. **CR drift detection** -- before replacing the source-CR directory,
-   diff every CR file the partner references (via `path:` in
-   their PG manifests) against the corresponding reference CR
-   for the **source** version. Any field that differs is a direct
-   edit the partner made instead of using a PG patch. These edits
-   will be silently lost when source-crs are replaced with the target
-   version. For each diff found:
-   - Flag as `[!]` in the checklist
-   - Show the exact field, partner's value, and reference default
-   - Warn that the edit will be lost on source-crs replacement
-   - Suggest adding a PG patch to preserve the customization
-   Only diff source-crs the partner actually references in their PG
-   manifests — ignore unused files.
-5. **Identify and stage custom source-CRs** -- before replacing the
-   directory, compare each `path:` in the partner's PolicyGenerator
-   against the reference PG examples for the source version. If a partner
-   path differs from the reference path for the same CR kind, the partner
-   has a custom source-CR (e.g. a custom `sriovOperatorConfigForSNO.yaml`
-   instead of the reference `SriovOperatorConfig.yaml`). Stage these files
-   aside so the next step's replacement can't delete them.
-6. **Replace the source-CR directory** for the target version. Extract
-   from the container using the method in the matching reference guide
-   (it differs by use case — e.g. Core streams a base64 tar, so `oc
-   image extract` does not apply). Prefer re-extracting each run; reuse
-   a local `ref-{version}/` only when confirmed latest, per EXPLAIN
-   step 1.
-7. **Restore staged custom source-CRs** -- copy the files staged in
-   step 5 back into the output, in a directory **separate** from the
-   managed reference source-CRs (e.g. `custom-crs/`) -- never intermixed
-   under the reference source-CR directory, which is replaced wholesale
-   on upgrade (anything under it is lost). If the partner had intermixed
-   custom CRs under the managed directory, relocate them to the separate
-   directory and update the `path:` references in their PolicyGenerator,
-   flagging the change. These custom files must be:
-   - Preserved unchanged during merge (do not replace with reference paths)
-   - Never overwritten by a reference-delivered source-CR
-   - Flagged for user review (the custom CR may need updates for the
-     target version's API changes)
-8. **Verify paths** -- check that every managed reference `path:` the
-   partner uses still resolves in the new source-CR directory (including
-   backward-compatible symlinks); if one is missing, the merge must
-   update it to the new reference location. For relocated custom-CR paths
-   (e.g. `custom-crs/...` from step 7), verify them against the separate
-   custom directory and leave them pointing there -- do not redirect a
-   custom CR's `path:` into the reference source-CR directory.
+Before processing any checklist item, read `references/merge-setup.md` and
+complete steps 0-8 in it, in order: check validation tools, load the
+checklist, clone or copy the partner source (ask first), prepare the target
+workspace, detect CR drift, stage custom source-CRs, replace the source-CR
+directory, restore custom source-CRs, and verify paths.
 
 ### Processing (checklist-driven)
 
@@ -420,58 +387,17 @@ that turn out to be fine than to silently break 1 thing.
 
 ### Output Validation (Write → Read → Verify → Fix)
 
-**Automatic validation:** a hook runs `kustomize build` after every
-Write/Edit of a PolicyGenerator YAML — errors feed back automatically.
-
-After writing each PolicyGenerator file, **read the file back** and
-run these checks against the actual written content — not your memory
-of what you wrote. If any check fails, fix the file with an Edit and
-re-read to confirm the fix.
-
-1. **Content preservation check** -- for every manifest in the partner's
-   INPUT file, verify the OUTPUT file has a corresponding manifest. For
-   every patch field in the input, verify it exists in the output. If
-   a field from the partner's input is missing from the output, you
-   dropped partner content -- add it back immediately. Never silently
-   remove a partner patch field without the user confirming removal.
-2. **YAML nesting** -- `metadata:`, `spec:`, `data:`, `status:` must be
-   siblings at the same indent level under each CR patch — not nested
-   under each other. If you find nesting errors, **do not fix them** —
-   these are pre-existing partner issues. Preserve the partner's original
-   structure and flag as `NOTE: pre-existing issue` in the checklist.
-3. **Redundant overlay sweep** -- for every patched field in every
-   manifest, read the target version's source-cr file and compare. If
-   the patch value matches the source-cr default, flag as `[~]`
-   redundant. This catches overlays the per-item processing missed.
-   **Critical:** a partner field is only redundant if its value is
-   character-for-character identical to the source-cr default. If the
-   values differ at all, it is a partner customization -- preserve it.
-4. **New reference field sweep** -- for every manifest the partner uses,
-   compare the partner's patch fields against the target version's
-   source-cr. If the source-cr added a new field the partner doesn't
-   patch (e.g. `ptpSchedulingPolicy`), flag it as available in the
-   checklist -- do not inject it into the partner's patches.
-5. **Semver sweep on written files** -- read each written PG file and
-   search for any remaining occurrence of the source version (e.g.
-   `4.18`). This catches version-bearing annotations, image tags, and
-   labels that the version bumping step missed. If found, update them
-   and note the change in `checklist.md`.
-
-Preserve the partner's original YAML quoting conventions exactly.
-Different quote styles (`"value"` vs `'value'` vs `value`) can
-produce functionally different strings in some contexts.
+After writing each PolicyGenerator file, read
+`references/output-validation.md` and run every check in it against the
+file as written: content preservation, YAML nesting, redundant overlay
+sweep, new reference field sweep, and semver sweep. Fix and re-read until
+all checks pass.
 
 ### Version Bumping
 
-After processing all checklist items, walk the version-bumping section:
-- Update `metadata.name` version suffixes in PolicyGenerator YAML
-- Update `policyDefaults.namespace`
-- Update `placement.labelSelector` version labels
-- Update Namespace and ManagedClusterSetBinding resources
-- For CatalogSource image tags: update those that track the OCP version.
-  If a tag doesn't match the current version (partner pinned it to
-  something else), flag as `[~] ⚠ REVIEW` in the checklist and
-  preserve the partner's value.
+After processing all checklist items, read `references/version-bumping.md`
+and complete all three steps in it: version bumping, template ConfigMap
+updates, and the parent kustomization entry. Then run the semver sweep below.
 
 ### Semver Sweep
 
@@ -492,24 +418,6 @@ Common locations this catches:
 - Filenames referenced in kustomization.yaml generators/resources
 - Hub template namespace references (`{{hub ... hub}}`)
 - Channel values, label selectors, namespace suffixes
-
-### Template ConfigMaps
-
-ConfigMaps used as hub templates (referenced by `{{hub ... hub}}`
-lookups) need the same namespace updates as CRs. If the version
-bumping step changed CR namespaces, update the template ConfigMap
-namespaces to match — lookups will break if the namespace is stale.
-
-Also scan ConfigMap `data:` sections for version-bearing content
-(e.g. catalog index tags, image references). Flag these with
-`⚠ REVIEW` — they may need updating for the target version.
-
-### Parent Kustomization
-
-After creating the new version directory, update the `kustomization.yaml`
-in the parent directory to add the new version directory to the
-`generators:` or `resources:` list. Without this entry, kustomize
-won't process the new version's policies.
 
 ### Finish
 
@@ -565,3 +473,27 @@ parts of it:
 - Hub template ConfigMaps (as needed)
 
 Flag new hub template variables that need per-cluster values populated.
+
+## Dependencies
+
+### Required MCP Servers
+None.
+
+### Required MCP Tools
+None.
+
+### Related Skills
+None.
+
+### Reference Documentation
+The reference guides listed under What's In This Skill.
+
+## Example Usage
+
+User: "upgrade my policies from 4.18 to 4.20, the policy source is ./acme-ran"
+
+1. EXPLAIN: extract both RAN references, diff them, and save `explain.md`
+   and `checklist.md` in `/tmp/rds-merge-4.20-<timestamp>/`.
+2. MERGE: ask before copying `./acme-ran`, apply each checklist item to the
+   copy, and ask about each conflict as it comes up.
+3. Finish: report each missing required CR as a WARNING, then present the checklist.
