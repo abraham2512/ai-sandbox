@@ -130,7 +130,8 @@ VALIDATE), always end with this notice on its own line:
   Read the matching reference guide, `cr-matching-heuristics.md`,
   `merge-conflict-resolution.md`, and `hub-template-handling.md`. For
   each CR type with a file in `cr-guidance/`, read it when processing
-  that CR.
+  that CR. Keep the partner's MachineConfigPool layout -- never adopt the
+  reference's example pools (see `cr-matching-heuristics.md`).
 - **VALIDATE** -- dry-run merged policies against hub.
   Read `references/validate-phases.md` before starting.
 
@@ -232,13 +233,6 @@ All outputs (reports, checklist, merged policies) go inside this directory.
   values, e.g. 1/5/6/200). Preserve the reference's waves; don't move
   CRs across them.
 
-- The MachineConfigPool layout is the partner's: how many pools, their
-  names, and their node selectors come from the partner's policies, not
-  the reference's example pools (Core ships `worker-1/2/3`). A different
-  layout is not a conflict to ask about -- keep the partner's. Each
-  partner pool's configuration must still follow one of the reference
-  pool configurations (see Processing).
-
 - Policy CRD accepts unknown fields inside `objectDefinition` --
   dry-run only catches Policy wrapper errors, not embedded CR errors.
 
@@ -281,24 +275,6 @@ PolicyGenerator files, different policy groupings, different names.
 Always follow the partner's structure. If the reference moved a CR
 to a different wave or policy, note it and ask for confirmation
 rather than silently reorganizing.
-
-**The partner owns the MachineConfigPool layout.** How many
-MachineConfigPools exist, their names, and the node selectors that bind
-per-pool CRs to them (PerformanceProfile `nodeSelector`, Tuned
-`machineConfigLabels`, NROP `machineConfigPoolSelector`) come from the
-partner's policies, never from the reference. The reference ships only
-an *example* layout; when the partner's differs, keep the partner's and
-do not add the reference's example pools. Unlike a wave/policy move,
-this is deterministic -- do NOT ask which layout to use.
-
-**Each partner pool still follows a reference pool configuration.**
-Match each pool's per-pool CRs to a reference pool by role/intent
-(`references/cr-matching-heuristics.md`) and apply that reference
-pool's changes to them like any other matched CR, keeping them bound to
-the partner's pool name. A per-pool CR change is not N/A just because
-the reference binds it to its own example pools. If a partner pool
-matches no reference pool configuration, warn about it as a deviation
--- do not create per-pool CRs to fill the gap.
 
 **Write complete PolicyGenerator files.** Each merged PG file must
 contain ALL manifests from the partner's original -- not just the ones

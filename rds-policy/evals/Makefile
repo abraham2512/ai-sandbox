@@ -34,6 +34,7 @@ eval: preflight ## Run all evals (single pass)
 	npx promptfoo eval --no-cache
 
 eval-filter: preflight ## Run evals whose description matches PATTERN (e.g. make eval-filter PATTERN=T4)
+	@[ -n "$(PATTERN)" ] || { echo "eval-filter: set PATTERN (e.g. PATTERN=T4)" >&2; exit 1; }
 	npx promptfoo eval --no-cache --filter-pattern "$(PATTERN)"
 
 eval-repeat: preflight ## Run all evals 3x to measure variance

@@ -234,25 +234,22 @@ def check_absent_patterns(_output, context):
     replacing source-crs pulls in every reference CR (including pools the
     partner doesn't use), so scanning it would false-positive. What
     matters is whether those references leaked into the partner's PGs.
+    Unparseable YAML fails the check, since it can't be shown clean.
     """
     config = context.get("config") or {}
     forbidden = config.get("forbidden_patterns", [])
-    written = collect_written_files(context)
-    pg_text = []
-    for fp, content in written.items():
-        if not fp.endswith((".yaml", ".yml")):
-            continue
-        try:
-            docs = list(yaml.safe_load_all(content))
-        except yaml.YAMLError:
-            continue
-        # Serialize only the PolicyGenerator docs — not sibling docs or
-        # comments in the same file, which could mention a reference name
-        # without it being an actual topology leak.
-        for d in docs:
-            if isinstance(d, dict) and d.get("kind") == "PolicyGenerator":
-                pg_text.append(yaml.safe_dump(d))
-    blob = "\n".join(pg_text)
+    pg_docs, skipped = parse_pg_docs(collect_written_files(context))
+    errors = [s for s in skipped if "error" in s]
+    if errors:
+        return {
+            "pass_": False,
+            "score": 0,
+            "reason": f"Unparseable YAML in output: {', '.join(e['file'] for e in errors)}",
+        }
+    # Serialize only the PolicyGenerator docs — not sibling docs or
+    # comments in the same file, which could mention a reference name
+    # without it being an actual topology leak.
+    blob = "\n".join(yaml.safe_dump(d) for d in pg_docs)
     present = [p for p in forbidden if p in blob]
     if present:
         return {
