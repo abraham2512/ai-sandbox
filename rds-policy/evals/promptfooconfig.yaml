@@ -680,7 +680,7 @@ tests:
 
   - description: "T4 TOPOLOGY PRESERVATION — keep partner MCP structure/naming"
     vars:
-      prompt: "upgrade my telco core policies from 4.18 to 4.20. the policy source is partner-multinode/. use the local reference directories ref-mn-4.18/ and ref-mn-4.20/ as the 4.18 and 4.20 references (do not use ref-4.18/ or ref-4.20/). do the full EXPLAIN and MERGE end-to-end, use recommended defaults for any conflicts"
+      prompt: "upgrade my telco core policies from 4.18 to 4.20. the policy source is partner-multinode/. use the local reference directories ref-mn-4.18/ and ref-mn-4.20/ as the 4.18 and 4.20 references (do not use ref-4.18/ or ref-4.20/). do the full EXPLAIN and MERGE end-to-end"
     assert:
       - type: skill-used
         value: rds-policy-update
@@ -739,7 +739,10 @@ tests:
              the reference per-pool PerformanceProfile and report the
              module_blacklist=irdma change as applying to it (keeping it
              bound to worker-cnf) — NOT mark it N/A because the reference
-             binds its profiles to worker-1/2/3.
+             binds its profiles to worker-1/2/3. The partner's patch does
+             not override additionalKernelArgs, so inheriting the change
+             from the updated 4.20 base CR counts as applying it; it does
+             not need to be added to the patch.
           Score 1.0 if all three hold, 0.5 if the partner's topology is
           preserved but the agent asked which to use or did not carry the
           PerformanceProfile change to worker-cnf, 0.0 if it adopted the
