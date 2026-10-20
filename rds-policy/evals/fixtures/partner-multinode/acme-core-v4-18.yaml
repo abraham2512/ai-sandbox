@@ -42,3 +42,4 @@ policies:
               size: 1G
           nodeSelector:
             node-role.kubernetes.io/worker-cnf: ""
+    - path: custom-crs/PerformanceProfile-rt.yaml

@@ -676,6 +676,11 @@ tests:
   # change (additionalKernelArgs: module_blacklist=irdma) must reach the
   # partner's worker-cnf profile, which stays bound to worker-cnf. A
   # Subscription channel bump (4.18→4.20) must also flow through.
+  #
+  # Deviation case: worker-1 uses the partner's own real-time profile
+  # (custom-crs/PerformanceProfile-rt.yaml). Every reference pool profile
+  # is non-real-time, so it matches none of them: keep it unchanged and
+  # warn about the deviation, without adding another profile for worker-1.
   # ============================================================
 
   - description: "T4 TOPOLOGY PRESERVATION — keep partner MCP structure/naming"
@@ -703,6 +708,9 @@ tests:
               cr: "source-crs/PerformanceProfile.yaml"
               path: "patches[].spec.nodeSelector"
               contains: "node-role.kubernetes.io/worker-cnf"
+            - name: deviating_profile_kept
+              type: exists
+              cr: "custom-crs/PerformanceProfile-rt.yaml"
 
       # Deterministic: output keeps exactly the partner's pools (from
       # partner-multinode/acme-core-v4-18.yaml) -- none dropped, no
@@ -719,9 +727,12 @@ tests:
         value: |
           The partner's policies define TWO MachineConfigPools: worker-1
           (the reference's source-crs/mcp-worker-1.yaml) and their own
-          worker-cnf (custom-crs/mcp-worker-cnf.yaml), with one
-          PerformanceProfile bound to worker-cnf. The 4.20 reference
-          example ships three pools (worker-1/2/3), each with its own
+          worker-cnf (custom-crs/mcp-worker-cnf.yaml). worker-cnf's
+          PerformanceProfile is built from the reference
+          source-crs/PerformanceProfile.yaml; worker-1 uses the partner's
+          own real-time profile (custom-crs/PerformanceProfile-rt.yaml,
+          realTimeKernel enabled). The 4.20 reference example ships three
+          pools (worker-1/2/3), each with a non-real-time
           PerformanceProfile, and the 4.20 reference PerformanceProfile
           adds additionalKernelArgs: module_blacklist=irdma. The agent
           should:
@@ -738,11 +749,18 @@ tests:
              not override additionalKernelArgs, so inheriting the change
              from the updated 4.20 base CR counts as applying it; it does
              not need to be added to the patch.
-          Score 1.0 if all three hold, 0.5 if the partner's topology is
-          preserved but the agent asked which to use or did not carry the
-          PerformanceProfile change to worker-cnf, 0.0 if it adopted the
-          reference topology, dropped a partner pool, or rebound the
-          partner's profile to a reference pool.
+          4. Warn that worker-1's real-time profile matches none of the
+             reference pool configurations (a deviation for the partner
+             to review), while keeping it unchanged and NOT adding another
+             PerformanceProfile for worker-1. Merely listing it as
+             preserved custom content, without calling out the mismatch,
+             does not count.
+          Score 1.0 if all four hold, 0.5 if the partner's topology is
+          preserved but the agent asked which to use, did not carry the
+          PerformanceProfile change to worker-cnf, or did not warn about
+          worker-1's deviation, 0.0 if it adopted the reference topology,
+          dropped a partner pool, rebound a partner profile to another
+          pool, or rewrote or replaced worker-1's profile.
         threshold: 1.0
         metric: topology-preservation
         transform: file://assertions/common.py:enrich_output
