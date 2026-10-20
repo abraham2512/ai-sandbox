@@ -28,12 +28,15 @@ OpenShell adds three things:
 - **Credential management** — OpenShell holds the token and brokers egress, so
   the agent never handles the raw secret.
 
-Runaway is already bounded: `promptfooconfig.yaml` sets `max_turns` and
-`max_budget_usd` per test. No new limits needed.
+`promptfooconfig.yaml` bounds each test with `max_turns` and `max_budget_usd`,
+and `PROMPTFOO_EVAL_TIMEOUT_MS` adds a per-test wall-clock timeout. These limit
+one test, not the run as a whole, so the infra also bounds the job (see the
+CronJob below).
 
-We supply our own Vertex service-account credential, since we cannot mount
-another team's. We hand it to OpenShell to manage, so the infra only needs
-somewhere to store the one secret. The handoff is the same on any platform.
+We supply our own model credential, since we cannot mount another team's. Any
+valid credential for the agent's and judge's provider works; today that is a
+Vertex service account. We hand it to OpenShell to manage, so the infra only
+needs somewhere to store it. The handoff is the same on any platform.
 
 ### The infra: where the container runs
 
@@ -44,8 +47,12 @@ GitHub Actions is out by org policy. Three ways to get the rest:
 **Our cluster, an OpenShift CronJob (simplest).** We already run OpenShell on a
 cluster, so little is new: a `CronJob` is the scheduler, the cluster is the
 runner, a `Secret` holds the token, and a `PVC` keeps the history. The CronJob
-kicks off an OpenShell sandbox run each week. Iterate with `oc apply`, and
-optionally add a `Route` to serve the dashboard.
+kicks off an OpenShell sandbox run each week and bounds the job with
+`concurrencyPolicy: Forbid` so runs never overlap, `activeDeadlineSeconds` of an
+hour (a normal run takes minutes) to kill a hung run, `backoffLimit: 0` so a
+failed run is not retried and billed twice, and CPU and memory limits on the
+pod. Iterate with `oc apply`, and optionally add a `Route` to serve the
+dashboard.
 
 **Prow (org standard).** Prow already runs jobs for this repo, saves artifacts
 to GCS, and has a path into the org's metrics. The catch is OpenShell. OpenShell
@@ -68,9 +75,9 @@ platform. Given we already have the cluster, it is redundant.
 The container is the same everywhere, so only the infra switches:
 
 - **Short term: the CronJob on our cluster.** Fewest moving parts, reuses
-  OpenShell and Vertex, iterate with `oc apply`. Whichever infra we land on, we
-  first have to know what a cluster needs to run the OpenShell CronJob, and this
-  is where we learn it end to end.
+  OpenShell and our existing credential, iterate with `oc apply`. Whichever
+  infra we land on, we first have to know what a cluster needs to run the
+  OpenShell CronJob, and this is where we learn it end to end.
 - **Long term: Prow.** The org-standard home once the loop is proven and
   OpenShell's requirements are understood.
 
@@ -89,12 +96,18 @@ matters because the evals are non-deterministic: a bad run may not happen again,
 so if we do not save it the evidence is lost. That is also why the file rotates
 out — we only need it for runs that fail.
 
+Proposed retention: the `PVC` keeps the full file for the last five runs, about
+five weeks at one run a week, which leaves time to triage a failure. Each job
+deletes the oldest run before writing its own. A failed run worth keeping longer
+gets copied off the `PVC` by hand.
+
 What we track over time is a small `summary.json` distilled from it (pass rate,
-per-test score, cost, latency, model IDs, git SHA). It is tiny and numbers-only,
-so we commit it to the repo. Git is the durable record: diffable, reviewable,
-and independent of the cluster. Each run appends one summary and pushes it, using
-a repo write token that OpenShell holds and brokers just like the Vertex one. A
-small static page can render the committed history as a trend.
+per-test score, cost, latency, model IDs, git SHA). It is small and holds no
+transcripts or agent output, so we commit it to the repo. Git is the durable
+record: diffable, reviewable, and independent of the cluster. Each run appends
+one summary and pushes it, using a repo write token that OpenShell holds and
+brokers just like the model credential. A small static page can render the
+committed history as a trend.
 
 As an option, we can self-host promptfoo's own server (a Docker image with a
 persistent volume) and push each run to it with `promptfoo share`. That gives the
@@ -104,7 +117,10 @@ third-party non-goal. The cost is a standing service to run, secure, and back up
 it stores everything, transcripts included, in SQLite on a volume, has no
 built-in auth, and promptfoo itself calls it experimental, not production. So the
 git summary stays the durable trend record; the self-hosted server is an optional
-richer view over the same runs.
+richer view over the same runs. To go beyond a trial, the server would have to
+be an official managed service, not one we stand up and look after ourselves.
+Before building one, check what already runs that we could use instead, such as
+DCI.
 
 ## Non-Goals
 
