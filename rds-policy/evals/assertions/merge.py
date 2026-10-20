@@ -13,6 +13,8 @@ Communication checks (conflict flagging, overlay lifecycle, checklist
 quality) are handled by llm-rubric in promptfooconfig.yaml.
 """
 
+import re
+
 import jmespath
 import yaml
 
@@ -224,20 +226,20 @@ def check_quote_preservation(_output, context):
     }
 
 
-def check_absent_patterns(_output, context):
-    """Patterns that must NOT appear in the output PolicyGenerator files.
+def check_pool_set(_output, context):
+    """The output PolicyGenerators must keep exactly the partner's pools.
 
-    Used to verify the agent didn't adopt reference-only values into the
-    partner's policies — e.g. the reference's example topology pool
-    references (mcp-worker-1/2/3) when the partner has their own pool.
+    ``pools`` in the config is the partner's pool set from the source PGs.
+    The MachineConfigPool manifests (``mcp-<pool>.yaml``) in the output
+    must name exactly that set -- nothing dropped, nothing added from the
+    reference's example layout -- and no ``node-role.kubernetes.io/<pool>``
+    selector may bind a CR to a pool outside it.
     Scans PolicyGenerator docs only, NOT the copied source-crs/ library:
     replacing source-crs pulls in every reference CR (including pools the
-    partner doesn't use), so scanning it would false-positive. What
-    matters is whether those references leaked into the partner's PGs.
+    partner doesn't use), so scanning it would false-positive.
     Unparseable YAML fails the check, since it can't be shown clean.
     """
-    config = context.get("config") or {}
-    forbidden = config.get("forbidden_patterns", [])
+    expected = set((context.get("config") or {}).get("pools", []))
     pg_docs, skipped = parse_pg_docs(collect_written_files(context))
     errors = [s for s in skipped if "error" in s]
     if errors:
@@ -250,17 +252,21 @@ def check_absent_patterns(_output, context):
     # comments in the same file, which could mention a reference name
     # without it being an actual topology leak.
     blob = "\n".join(yaml.safe_dump(d) for d in pg_docs)
-    present = [p for p in forbidden if p in blob]
-    if present:
-        return {
-            "pass_": False,
-            "score": 0,
-            "reason": f"Forbidden patterns present in output PolicyGenerator(s): {', '.join(present)}",
-        }
+    mcp_pools = set(re.findall(r"mcp-([\w.-]+?)\.ya?ml", blob))
+    bound_pools = set(re.findall(r"node-role\.kubernetes\.io/([\w.-]+)", blob))
+    problems = []
+    if mcp_pools != expected:
+        problems.append(
+            f"MachineConfigPools {sorted(mcp_pools)} != partner's {sorted(expected)}"
+        )
+    if bound_pools - expected:
+        problems.append(f"CRs bound to other pools: {sorted(bound_pools - expected)}")
+    if problems:
+        return {"pass_": False, "score": 0, "reason": "; ".join(problems)}
     return {
         "pass_": True,
         "score": 1.0,
-        "reason": "No forbidden patterns found in output PolicyGenerator(s)",
+        "reason": f"Output keeps exactly the partner's pools: {sorted(expected)}",
     }
 
 
