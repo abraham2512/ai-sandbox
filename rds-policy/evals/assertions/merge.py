@@ -13,7 +13,10 @@ Communication checks (conflict flagging, overlay lifecycle, checklist
 quality) are handled by llm-rubric in promptfooconfig.yaml.
 """
 
+import re
+
 import jmespath
+import yaml
 
 from common import (
     collect_manifests,
@@ -220,6 +223,50 @@ def check_quote_preservation(_output, context):
         "pass_": True,
         "score": 1.0,
         "reason": "All quote patterns preserved",
+    }
+
+
+def check_pool_set(_output, context):
+    """The output PolicyGenerators must keep exactly the partner's pools.
+
+    ``pools`` in the config is the partner's pool set from the source PGs.
+    The MachineConfigPool manifests (``mcp-<pool>.yaml``) in the output
+    must name exactly that set -- nothing dropped, nothing added from the
+    reference's example layout -- and no ``node-role.kubernetes.io/<pool>``
+    selector may bind a CR to a pool outside it.
+    Scans PolicyGenerator docs only, NOT the copied source-crs/ library:
+    replacing source-crs pulls in every reference CR (including pools the
+    partner doesn't use), so scanning it would false-positive.
+    Unparseable YAML fails the check, since it can't be shown clean.
+    """
+    expected = set((context.get("config") or {}).get("pools", []))
+    pg_docs, skipped = parse_pg_docs(collect_written_files(context))
+    errors = [s for s in skipped if "error" in s]
+    if errors:
+        return {
+            "pass_": False,
+            "score": 0,
+            "reason": f"Unparseable YAML in output: {', '.join(e['file'] for e in errors)}",
+        }
+    # Serialize only the PolicyGenerator docs — not sibling docs or
+    # comments in the same file, which could mention a reference name
+    # without it being an actual topology leak.
+    blob = "\n".join(yaml.safe_dump(d) for d in pg_docs)
+    mcp_pools = set(re.findall(r"mcp-([\w.-]+?)\.ya?ml", blob))
+    bound_pools = set(re.findall(r"node-role\.kubernetes\.io/([\w.-]+)", blob))
+    problems = []
+    if mcp_pools != expected:
+        problems.append(
+            f"MachineConfigPools {sorted(mcp_pools)} != partner's {sorted(expected)}"
+        )
+    if bound_pools - expected:
+        problems.append(f"CRs bound to other pools: {sorted(bound_pools - expected)}")
+    if problems:
+        return {"pass_": False, "score": 0, "reason": "; ".join(problems)}
+    return {
+        "pass_": True,
+        "score": 1.0,
+        "reason": f"Output keeps exactly the partner's pools: {sorted(expected)}",
     }
 
 
