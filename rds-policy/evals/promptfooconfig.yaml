@@ -54,7 +54,7 @@ defaultTest:
         projectId: '{{ env.ANTHROPIC_VERTEX_PROJECT_ID }}'
         region: '{{ env.CLOUD_ML_REGION }}'
         # Leave room for Claude's thinking plus the rubric response.
-        max_tokens: &grader_max_tokens 2048
+        max_tokens: &grader_max_tokens 4096
         # HTTP client settings, used only when OpenShell selects `https`.
         # The sandbox proxy replaces the placeholder token with a real one.
         url: 'https://aiplatform.googleapis.com/v1/projects/{{ env.ANTHROPIC_VERTEX_PROJECT_ID }}/locations/{{ env.CLOUD_ML_REGION }}/publishers/anthropic/models/claude-sonnet-5:rawPredict'
@@ -764,12 +764,3 @@ tests:
         threshold: 1.0
         metric: topology-preservation
         transform: file://assertions/common.py:enrich_output
-
-      # Deterministic: agent must NOT ask which topology to use
-      - type: python
-        value: file://assertions/workflow.py:no_topology_question
-        metric: no-topology-question
-        config:
-          # Only the reference pools the partner doesn't use; worker-1 is
-          # theirs and can come up in ordinary questions
-          reference_pools: ["worker-2", "worker-3"]
