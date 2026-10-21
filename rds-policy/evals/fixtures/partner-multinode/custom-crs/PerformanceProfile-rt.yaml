@@ -5,13 +5,13 @@ metadata:
   name: worker-1-rt-profile
 spec:
   cpu:
-    isolated: "2-51,54-103"
-    reserved: "0-1,52-53"
+    isolated: "2-47,50-95"
+    reserved: "0-1,48-49"
   globallyDisableIrqLoadBalancing: true
   hugepages:
     defaultHugepagesSize: 1G
     pages:
-    - count: 4
+    - count: 2
       size: 1G
   nodeSelector:
     node-role.kubernetes.io/worker-1: ""
